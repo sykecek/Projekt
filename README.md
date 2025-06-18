@@ -3,7 +3,7 @@ Autor: Sýkora Šimon, Vařejka Josef
 
  Školní rok: 2025/2026 
 
- Vedoucí projektu: Příbramský Jaroslav 
+ 
 
   
 
@@ -11,7 +11,7 @@ Autor: Sýkora Šimon, Vařejka Josef
 
   
 
-Tento maturitní projekt se zabývá návrhem a realizací robotické ruky, která je ovládána prostřednictvím mobilní aplikace. Cílem projektu je propojit moderní technologie hardwarového vývoje  a softwarového vývoje za účelem vytvoření funkčního systému, který umožňuje ovládání robotické ruky na dálku. 
+Tento projekt se zabývá návrhem a realizací robotické ruky, která je ovládána prostřednictvím mobilní aplikace. Cílem projektu je propojit moderní technologie hardwarového vývoje  a softwarového vývoje za účelem vytvoření funkčního systému, který umožňuje ovládání robotické ruky na dálku. 
 
   
 
