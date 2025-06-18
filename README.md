@@ -37,7 +37,9 @@ Realizace projektu zahrnuje:
 
     Vývoj mobilní aplikace: Návrh a implementace uživatelsky přívětivé mobilní aplikace ve Flutteru, která umožňuje vzdálené ovládání ruky prostřednictvím Bluetooth  
 
-    Systémové testování: Integrace všech částí systému a následné komplexní testování, jehož cílem je optimalizace funkcionality a uživatelského zážitku 
+    Systémové testování: Integrace všech částí systému a následné komplexní testování, jehož cílem je optimalizace funkcionality 
+
+    Budoucí cíle: Vizualizace aplikace, dolaďování uživatelského zážitku
 
  
 
