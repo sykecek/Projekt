@@ -1,3 +1,4 @@
+import 'dart:convert'; // for utf8 encoding
 import 'dart:typed_data'; //poskytuje typy pro binární data, např. Uint8List (pole bajtů)
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart'; //3rd‑party balíček pro klasické (Classic) Bluetooth SPP na Flutteru (připojení k HC‑05, čtení/zápis přes socket).
 import 'package:get/get.dart';//GetX knihovna (state management, routování, snackbar, dependency injection). Používá se zde hlavně pro kontroler, reaktivitu a navigaci.
@@ -20,6 +21,9 @@ class BluetoothController extends GetxController {
   var connectedDevice = Rx<BluetoothDevice?>(null); ///reaktivní (Rx) reference na aktuálně připojené zařízení (BluetoothDevice), defaltně null (není připojeno).
   BluetoothConnection? connection; ///proměnná (connection) pro uložení aktivního Bluetooth připojení (BluetoothConnection - class z flutter serial package), může být null (není připojeno).
   var isConnected = false.obs; ///reaktivní (obs) boolean (bool) indikující, zda je zařízení připojeno.
+  
+  // Track last sent command to avoid redundant transmissions
+  String? _lastSentCommand;
 
   Future<bool> ensureBluetoothPermissions() async { ///asynchronní metoda, která zajišťuje potřebná Bluetooth oprávnění. /// vrací Future<bool> (true pokud jsou oprávnění povolena, jinak false).
     // 1) Požádá systém o runtime oprávnění
@@ -132,10 +136,19 @@ class BluetoothController extends GetxController {
   void sendServoCommand(int pin, int angle, int speed) {
     if (connection != null && connection!.isConnected) {
       String command = '$pin,$angle,$speed\n';
+      
+      // Coalesce repeated values - skip if same as last command
+      if (command == _lastSentCommand) {
+        print('[DEBUG] Skipping redundant command: $command');
+        return;
+      }
+      
       print('[DEBUG] Pokus o odeslání: $command');
-      connection!.output.add(Uint8List.fromList(command.codeUnits));
+      // Use UTF-8 encoding instead of codeUnits
+      connection!.output.add(Uint8List.fromList(utf8.encode(command)));
       connection!.output.allSent.then((_) {
         print('Příkaz odeslán: $command');
+        _lastSentCommand = command;
       });
     } else {
       print('Zařízení není připojeno!');
@@ -148,6 +161,7 @@ class BluetoothController extends GetxController {
     connection = null;
     isConnected.value = false;
     connectedDevice.value = null;
+    _lastSentCommand = null;
     print('[DEBUG] Odpojeno od zařízení.');
   }
 
