@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'bluetooth_ovladac.dart';
@@ -20,6 +21,9 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
     'HAND (pin 0)': 90,
   };
   int servoSpeed = 50;
+  
+  // Debounce timers per servo
+  final Map<String, Timer?> _debounceTimers = {};
 
   final Map<String, int> servoPins = {
     'BASE (pin 12)': 12,
@@ -28,6 +32,17 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
     'WRIST (pin 2)': 2,
     'HAND (pin 0)': 0,
   };
+
+  @override
+  void dispose() {
+    // Cancel all debounce timers
+    for (var timer in _debounceTimers.values) {
+      timer?.cancel();
+    }
+    _debounceTimers.clear();
+    super.dispose();
+  }
+
   void resetServos() async {
   final defaultPositions = {
     'BASE (pin 12)': 90,
@@ -44,8 +59,10 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
     });
     // Odeslat příkaz na servo
     final int pin = servoPins[servoName]!;
-    print('[DEBUG] Reset: Posílám výchozí hodnotu pro $servoName (pin $pin): ${defaultPositions[servoName]} při rychlosti $servoSpeed');
-    btController.sendServoCommand(pin, defaultPositions[servoName]!, servoSpeed);
+    // Map speed from 0-100 to 1-255
+    final int mappedSpeed = (servoSpeed * 254 / 100).round() + 1;
+    print('[DEBUG] Reset: Posílám výchozí hodnotu pro $servoName (pin $pin): ${defaultPositions[servoName]} při rychlosti $mappedSpeed');
+    btController.sendServoCommand(pin, defaultPositions[servoName]!, mappedSpeed);
     // Počkej 300ms před dalším servem
     await Future.delayed(const Duration(milliseconds: 500));
     
@@ -119,10 +136,19 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
                           setState(() {
                             servoPositions[servoName] = newAngle.toInt();
                           });
-                          final int pin = servoPins[servoName]!;
-                           print('[DEBUG] Posílám hodnotu pro $servoName (pin $pin): ${newAngle.toInt()} při rychlosti $servoSpeed'); // <-- přidáno pro debug
-                          btController.sendServoCommand(
-                              pin, newAngle.toInt(), servoSpeed);
+                          
+                          // Cancel previous timer for this servo
+                          _debounceTimers[servoName]?.cancel();
+                          
+                          // Set new debounce timer (300ms)
+                          _debounceTimers[servoName] = Timer(const Duration(milliseconds: 300), () {
+                            final int pin = servoPins[servoName]!;
+                            // Map speed from 0-100 to 1-255
+                            final int mappedSpeed = (servoSpeed * 254 / 100).round() + 1;
+                            print('[DEBUG] Posílám hodnotu pro $servoName (pin $pin): ${newAngle.toInt()} při rychlosti $mappedSpeed');
+                            btController.sendServoCommand(
+                                pin, newAngle.toInt(), mappedSpeed);
+                          });
                         },
                       ),
                       const Divider(),
