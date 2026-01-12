@@ -14,7 +14,7 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
   final BluetoothController btController = Get.find<BluetoothController>();
 
   final Map<String, int> servoPositions = {
-    'BASE (pin 12)': 90,
+    'BASE (pin 12)': 84,
     'SHOULDER (pin 10)': 0,
     'ELBOW (pin 8)': 180,
     'WRIST (pin 2)': 90,
@@ -45,7 +45,7 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
 
   void resetServos() async {
   final defaultPositions = {
-    'BASE (pin 12)': 90,
+    'BASE (pin 12)': 84,
     'SHOULDER (pin 10)': 0,
     'ELBOW (pin 8)': 180,
     'WRIST (pin 2)': 90,
