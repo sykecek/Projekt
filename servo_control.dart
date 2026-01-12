@@ -13,33 +13,40 @@ class ServoControlScreen extends StatefulWidget {
 class _ServoControlScreenState extends State<ServoControlScreen> {
   final BluetoothController btController = Get.find<BluetoothController>();
 
+  // Servo name constants to avoid typos
+  static const String _servoBase = 'BASE (pin 12)';
+  static const String _servoShoulder = 'SHOULDER (pin 10)';
+  static const String _servoElbow = 'ELBOW (pin 8)';
+  static const String _servoWrist = 'WRIST (pin 2)';
+  static const String _servoHand = 'HAND (pin 0)';
+
   final Map<String, int> servoPositions = {
-    'BASE (pin 12)': 84,
-    'SHOULDER (pin 10)': 0,
-    'ELBOW (pin 8)': 158, // Changed from 180 to 158 for safety
-    'WRIST (pin 2)': 90,
-    'HAND (pin 0)': 90,
+    _servoBase: 84,
+    _servoShoulder: 0,
+    _servoElbow: 158, // Changed from 180 to 158 for safety
+    _servoWrist: 90,
+    _servoHand: 90,
   };
   int servoSpeed = 50;
   
   // Lock state per servo (default: locked for safety)
   final Map<String, bool> servoLocked = {
-    'BASE (pin 12)': true,
-    'SHOULDER (pin 10)': true,
-    'ELBOW (pin 8)': true,
-    'WRIST (pin 2)': true,
-    'HAND (pin 0)': true,
+    _servoBase: true,
+    _servoShoulder: true,
+    _servoElbow: true,
+    _servoWrist: true,
+    _servoHand: true,
   };
   
   // Debounce timers per servo
   final Map<String, Timer?> _debounceTimers = {};
 
   final Map<String, int> servoPins = {
-    'BASE (pin 12)': 12,
-    'SHOULDER (pin 10)': 10,
-    'ELBOW (pin 8)': 8,
-    'WRIST (pin 2)': 2,
-    'HAND (pin 0)': 0,
+    _servoBase: 12,
+    _servoShoulder: 10,
+    _servoElbow: 8,
+    _servoWrist: 2,
+    _servoHand: 0,
   };
   
   // Safety limits when locked
@@ -49,11 +56,11 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
   // WRIST: min 20°, max 180°
   // HAND: min 30°, max 100°
   final Map<String, Map<String, int>> safetyLimits = {
-    'BASE (pin 12)': {'min': 15, 'max': 165},
-    'SHOULDER (pin 10)': {'min': 0, 'max': 130}, // max is dynamic, 130 is absolute max
-    'ELBOW (pin 8)': {'min': 55, 'max': 158},
-    'WRIST (pin 2)': {'min': 20, 'max': 180},
-    'HAND (pin 0)': {'min': 30, 'max': 100},
+    _servoBase: {'min': 15, 'max': 165},
+    _servoShoulder: {'min': 0, 'max': 130}, // max is dynamic, 130 is absolute max
+    _servoElbow: {'min': 55, 'max': 158},
+    _servoWrist: {'min': 20, 'max': 180},
+    _servoHand: {'min': 30, 'max': 100},
   };
 
   @override
@@ -73,7 +80,7 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
   /// ELBOW >= 90°: SHOULDER max 125°
   /// ELBOW >= 78°: SHOULDER max 130°
   int _getShoulderMaxAngle() {
-    final elbowAngle = servoPositions['ELBOW (pin 8)']!;
+    final elbowAngle = servoPositions[_servoElbow]!;
     if (elbowAngle >= 158) return 56;
     if (elbowAngle >= 135) return 105;
     if (elbowAngle >= 114) return 117;
@@ -94,13 +101,13 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
   /// Get max limit for a servo based on lock state
   int _getMaxLimit(String servoName) {
     // ELBOW max is always 158 (physical collision)
-    if (servoName == 'ELBOW (pin 8)') {
+    if (servoName == _servoElbow) {
       return 158;
     }
     
     if (servoLocked[servoName] == true) {
       // SHOULDER has dynamic max based on ELBOW
-      if (servoName == 'SHOULDER (pin 10)') {
+      if (servoName == _servoShoulder) {
         return _getShoulderMaxAngle();
       }
       return safetyLimits[servoName]!['max']!;
@@ -119,11 +126,11 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
 
   void resetServos() async {
   final defaultPositions = {
-    'BASE (pin 12)': 84,
-    'SHOULDER (pin 10)': 0,
-    'ELBOW (pin 8)': 158, // Changed from 180 to 158 for safety
-    'WRIST (pin 2)': 90,
-    'HAND (pin 0)': 90,
+    _servoBase: 84,
+    _servoShoulder: 0,
+    _servoElbow: 158, // Changed from 180 to 158 for safety
+    _servoWrist: 90,
+    _servoHand: 90,
   };
   
   for (final servoName in defaultPositions.keys) {
@@ -133,7 +140,7 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
     });
     // Odeslat příkaz na servo
     final int pin = servoPins[servoName]!;
-    // Map speed from 0-100 to 1-255
+    // Map speed from 0-100 (UI range) to 1-255 (Arduino range)
     final int mappedSpeed = (servoSpeed * 254 / 100).round() + 1;
     print('[DEBUG] Reset: Posílám výchozí hodnotu pro $servoName (pin $pin): ${defaultPositions[servoName]} při rychlosti $mappedSpeed');
     btController.sendServoCommand(pin, defaultPositions[servoName]!, mappedSpeed);
@@ -278,13 +285,13 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
                 servoPositions[servoName] = clampedValue;
                 
                 // If ELBOW changed and SHOULDER is locked, auto-clamp SHOULDER
-                if (servoName == 'ELBOW (pin 8)' && servoLocked['SHOULDER (pin 10)'] == true) {
-                  final shoulderValue = servoPositions['SHOULDER (pin 10)']!;
+                if (servoName == _servoElbow && servoLocked[_servoShoulder] == true) {
+                  final shoulderValue = servoPositions[_servoShoulder]!;
                   final shoulderMax = _getShoulderMaxAngle();
                   if (shoulderValue > shoulderMax) {
-                    servoPositions['SHOULDER (pin 10)'] = shoulderMax;
+                    servoPositions[_servoShoulder] = shoulderMax;
                     // Send updated SHOULDER position immediately
-                    _sendServoCommand('SHOULDER (pin 10)', shoulderMax);
+                    _sendServoCommand(_servoShoulder, shoulderMax);
                   }
                 }
               });
@@ -319,6 +326,7 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
   /// Helper to send servo command
   void _sendServoCommand(String servoName, int angle) {
     final int pin = servoPins[servoName]!;
+    // Map speed from 0-100 (UI range) to 1-255 (Arduino range)
     final int mappedSpeed = (servoSpeed * 254 / 100).round() + 1;
     print('[DEBUG] Posílám hodnotu pro $servoName (pin $pin): $angle při rychlosti $mappedSpeed');
     btController.sendServoCommand(pin, angle, mappedSpeed);
