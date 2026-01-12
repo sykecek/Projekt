@@ -98,7 +98,7 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
   
   /// Get min limit for a servo based on lock state
   int _getMinLimit(String servoName) {
-    if (servoLocked[servoName] == true) {
+    if (servoLocked[servoName]!) {
       return safetyLimits[servoName]!['min']!;
     }
     // Unlocked: allow full range
@@ -112,7 +112,7 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
       return 158;
     }
     
-    if (servoLocked[servoName] == true) {
+    if (servoLocked[servoName]!) {
       // SHOULDER has dynamic max based on ELBOW
       if (servoName == _servoShoulder) {
         return _getShoulderMaxAngle();
@@ -165,7 +165,7 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: "Reset serv",
+            tooltip: "Reset servů",
             onPressed: resetServos,
           ),
           IconButton(
@@ -292,7 +292,7 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
                 servoPositions[servoName] = clampedValue;
                 
                 // If ELBOW changed and SHOULDER is locked, auto-clamp SHOULDER
-                if (servoName == _servoElbow && servoLocked[_servoShoulder] == true) {
+                if (servoName == _servoElbow && servoLocked[_servoShoulder]!) {
                   final shoulderValue = servoPositions[_servoShoulder]!;
                   final shoulderMax = _getShoulderMaxAngle();
                   if (shoulderValue > shoulderMax) {
