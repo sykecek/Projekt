@@ -24,9 +24,9 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
   static const int _debounceDelayNormal = 300; // Normal slider changes
   static const int _debounceDelayAutoClamp = 100; // Auto-clamp SHOULDER when ELBOW changes
   
-  // Visual indicator constants for SafetyLimitsPainter
-  static const double _sliderTrackPadding = 24.0; // Material Design slider default padding
-  static const double _safetyTickHeight = 12.0; // Height of safety limit tick marks
+  // Visual indicator constants for SafetyLimitsPainter (public for painter access)
+  static const double sliderTrackPadding = 24.0; // Material Design slider default padding
+  static const double safetyTickHeight = 12.0; // Height of safety limit tick marks
 
   final Map<String, int> servoPositions = {
     _servoBase: 84,
@@ -86,15 +86,14 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
   /// ELBOW >= 135°: SHOULDER max 105°
   /// ELBOW >= 114°: SHOULDER max 117°
   /// ELBOW >= 90°: SHOULDER max 125°
-  /// ELBOW >= 78°: SHOULDER max 130°
+  /// ELBOW < 90°: SHOULDER max 130° (absolute max when locked)
   int _getShoulderMaxAngle() {
     final elbowAngle = servoPositions[_servoElbow]!;
     if (elbowAngle >= 158) return 56;
     if (elbowAngle >= 135) return 105;
     if (elbowAngle >= 114) return 117;
     if (elbowAngle >= 90) return 125;
-    if (elbowAngle >= 78) return 130;
-    return 130; // absolute max when locked
+    return 130; // absolute max when locked (ELBOW < 90°)
   }
   
   /// Get min limit for a servo based on lock state
@@ -297,12 +296,16 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
                   final shoulderValue = servoPositions[_servoShoulder]!;
                   final shoulderMax = _getShoulderMaxAngle();
                   if (shoulderValue > shoulderMax) {
-                    servoPositions[_servoShoulder] = shoulderMax;
+                    final clampedShoulder = shoulderMax;
+                    servoPositions[_servoShoulder] = clampedShoulder;
                     // Cancel SHOULDER debounce timer if active
                     _debounceTimers[_servoShoulder]?.cancel();
                     // Send updated SHOULDER position with slight delay to avoid race condition
                     _debounceTimers[_servoShoulder] = Timer(const Duration(milliseconds: _debounceDelayAutoClamp), () {
-                      _sendServoCommand(_servoShoulder, shoulderMax);
+                      // Double-check SHOULDER hasn't been changed by user in the meantime
+                      if (servoPositions[_servoShoulder] == clampedShoulder) {
+                        _sendServoCommand(_servoShoulder, clampedShoulder);
+                      }
                     });
                   }
                 }
@@ -367,14 +370,14 @@ class SafetyLimitsPainter extends CustomPainter {
     // Calculate positions for min and max ticks
     // Slider track typically has padding, approximate positions
     // Note: This is an approximation based on Material Design slider defaults
-    final trackPadding = _ServoControlScreenState._sliderTrackPadding;
+    final trackPadding = _ServoControlScreenState.sliderTrackPadding;
     final trackWidth = size.width - (trackPadding * 2);
     
     final minPosition = trackPadding + (minLimit / totalRange) * trackWidth;
     final maxPosition = trackPadding + (maxLimit / totalRange) * trackWidth;
     
     // Draw vertical ticks at min and max positions
-    final tickHeight = _ServoControlScreenState._safetyTickHeight;
+    final tickHeight = _ServoControlScreenState.safetyTickHeight;
     final centerY = size.height / 2;
     
     // Min tick
