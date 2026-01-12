@@ -290,8 +290,12 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
                   final shoulderMax = _getShoulderMaxAngle();
                   if (shoulderValue > shoulderMax) {
                     servoPositions[_servoShoulder] = shoulderMax;
-                    // Send updated SHOULDER position immediately
-                    _sendServoCommand(_servoShoulder, shoulderMax);
+                    // Cancel SHOULDER debounce timer if active
+                    _debounceTimers[_servoShoulder]?.cancel();
+                    // Send updated SHOULDER position with slight delay to avoid race condition
+                    _debounceTimers[_servoShoulder] = Timer(const Duration(milliseconds: 100), () {
+                      _sendServoCommand(_servoShoulder, shoulderMax);
+                    });
                   }
                 }
               });
