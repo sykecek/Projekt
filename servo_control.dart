@@ -19,6 +19,14 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
   static const String _servoElbow = 'ELBOW (pin 8)';
   static const String _servoWrist = 'WRIST (pin 2)';
   static const String _servoHand = 'HAND (pin 0)';
+  
+  // Debounce timing constants (in milliseconds)
+  static const int _debounceDelayNormal = 300; // Normal slider changes
+  static const int _debounceDelayAutoClamp = 100; // Auto-clamp SHOULDER when ELBOW changes
+  
+  // Visual indicator constants for SafetyLimitsPainter
+  static const double _sliderTrackPadding = 24.0; // Material Design slider default padding
+  static const double _safetyTickHeight = 12.0; // Height of safety limit tick marks
 
   final Map<String, int> servoPositions = {
     _servoBase: 84,
@@ -237,7 +245,7 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
                 isLocked ? Icons.lock : Icons.lock_open,
                 color: isLocked ? Colors.red : Colors.green,
               ),
-              tooltip: isLocked ? 'Locked (bezpečný režim)' : 'Unlocked (plný rozsah)',
+              tooltip: isLocked ? 'Zamčeno (bezpečný režim)' : 'Odemčeno (plný rozsah)',
               onPressed: () {
                 setState(() {
                   servoLocked[servoName] = !isLocked;
@@ -293,7 +301,7 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
                     // Cancel SHOULDER debounce timer if active
                     _debounceTimers[_servoShoulder]?.cancel();
                     // Send updated SHOULDER position with slight delay to avoid race condition
-                    _debounceTimers[_servoShoulder] = Timer(const Duration(milliseconds: 100), () {
+                    _debounceTimers[_servoShoulder] = Timer(const Duration(milliseconds: _debounceDelayAutoClamp), () {
                       _sendServoCommand(_servoShoulder, shoulderMax);
                     });
                   }
@@ -302,7 +310,7 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
               
               // Debounced send
               _debounceTimers[servoName]?.cancel();
-              _debounceTimers[servoName] = Timer(const Duration(milliseconds: 300), () {
+              _debounceTimers[servoName] = Timer(const Duration(milliseconds: _debounceDelayNormal), () {
                 _sendServoCommand(servoName, servoPositions[servoName]!);
               });
             },
@@ -359,14 +367,14 @@ class SafetyLimitsPainter extends CustomPainter {
     // Calculate positions for min and max ticks
     // Slider track typically has padding, approximate positions
     // Note: This is an approximation based on Material Design slider defaults
-    final trackPadding = 24.0; // Material slider default padding
+    final trackPadding = _ServoControlScreenState._sliderTrackPadding;
     final trackWidth = size.width - (trackPadding * 2);
     
     final minPosition = trackPadding + (minLimit / totalRange) * trackWidth;
     final maxPosition = trackPadding + (maxLimit / totalRange) * trackWidth;
     
     // Draw vertical ticks at min and max positions
-    final tickHeight = 12.0;
+    final tickHeight = _ServoControlScreenState._safetyTickHeight;
     final centerY = size.height / 2;
     
     // Min tick
