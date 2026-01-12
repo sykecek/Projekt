@@ -67,11 +67,11 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
   }
   
   /// Calculate dynamic SHOULDER max angle based on ELBOW position
-  /// ELBOW = 158°: SHOULDER max 56°
-  /// ELBOW ≤ 135°: SHOULDER max 105°
-  /// ELBOW ≤ 114°: SHOULDER max 117°
-  /// ELBOW ≤ 90°: SHOULDER max 125°
-  /// ELBOW ≤ 78°: SHOULDER max 130°
+  /// ELBOW >= 158°: SHOULDER max 56°
+  /// ELBOW >= 135°: SHOULDER max 105°
+  /// ELBOW >= 114°: SHOULDER max 117°
+  /// ELBOW >= 90°: SHOULDER max 125°
+  /// ELBOW >= 78°: SHOULDER max 130°
   int _getShoulderMaxAngle() {
     final elbowAngle = servoPositions['ELBOW (pin 8)']!;
     if (elbowAngle >= 158) return 56;
@@ -283,6 +283,8 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
                   final shoulderMax = _getShoulderMaxAngle();
                   if (shoulderValue > shoulderMax) {
                     servoPositions['SHOULDER (pin 10)'] = shoulderMax;
+                    // Send updated SHOULDER position immediately
+                    _sendServoCommand('SHOULDER (pin 10)', shoulderMax);
                   }
                 }
               });
@@ -344,7 +346,8 @@ class SafetyLimitsPainter extends CustomPainter {
     
     // Calculate positions for min and max ticks
     // Slider track typically has padding, approximate positions
-    final trackPadding = 24.0; // Approximate padding from Material slider
+    // Note: This is an approximation based on Material Design slider defaults
+    final trackPadding = 24.0; // Material slider default padding
     final trackWidth = size.width - (trackPadding * 2);
     
     final minPosition = trackPadding + (minLimit / totalRange) * trackWidth;
