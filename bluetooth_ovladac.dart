@@ -22,8 +22,8 @@ class BluetoothController extends GetxController {
   BluetoothConnection? connection; ///proměnná (connection) pro uložení aktivního Bluetooth připojení (BluetoothConnection - class z flutter serial package), může být null (není připojeno).
   var isConnected = false.obs; ///reaktivní (obs) boolean (bool) indikující, zda je zařízení připojeno.
   
-  // Track last sent command to avoid redundant transmissions
-  String? _lastSentCommand;
+  
+  String? _lastSentCommand; ///poslední odeslaný příkaz (pro detekci duplicit)
 
   Future<bool> ensureBluetoothPermissions() async { ///asynchronní metoda, která zajišťuje potřebná Bluetooth oprávnění. /// vrací Future<bool> (true pokud jsou oprávnění povolena, jinak false).
     // 1) Požádá systém o runtime oprávnění
@@ -100,19 +100,19 @@ class BluetoothController extends GetxController {
   }
 
   /// Skenování spárovaných zařízení (HC-05 musí být spárován v systému!)
-  Future<void> scanDevices() async {
-    await ensureBluetoothPermissions();
-    devicesList.clear();
-    isScanning.value = true;
-    List<BluetoothDevice> bondedDevices = await bluetooth.getBondedDevices();
-    devicesList.assignAll(bondedDevices);
-    isScanning.value = false;
+  Future<void> scanDevices() async { ///asynchronní metoda pro skenování spárovaných Bluetooth zařízení. ///vrací Future<void> (nevrací žádnou hodnotu).
+    await ensureBluetoothPermissions(); ///zajistí, že jsou udělena potřebná Bluetooth oprávnění před pokračováním.
+    devicesList.clear(); ///vyčistí aktuální seznam zařízení před novým skenováním.
+    isScanning.value = true; ///nastaví indikátor skenování na true (probíhá skenování).
+    List<BluetoothDevice> bondedDevices = await bluetooth.getBondedDevices(); ///získá seznam spárovaných (bonded) Bluetooth zařízení a uloží je do proměnné bondedDevices. ///čeká na dokončení operace.
+    devicesList.assignAll(bondedDevices); ///aktualizuje reaktivní seznam devicesList nově získanými spárovanými zařízeními.
+    isScanning.value = false; ///nastaví indikátor skenování na false (skončilo skenování).
   }
 
   /// Připojení k zařízení (např. HC-05)
-  Future<void> connectToDevice(BluetoothDevice device) async {
-    try {
-      connection = await BluetoothConnection.toAddress(device.address);
+  Future<void> connectToDevice(BluetoothDevice device) async { ///asynchronní metoda pro připojení k zadanému Bluetooth zařízení. ///vrací Future<void> (nevrací žádnou hodnotu). ///parametr device typu BluetoothDevice představuje zařízení, ke kterému se chceme připojit.
+    try { ///začátek bloku pro zachycení chyb během připojování.
+      connection = await BluetoothConnection.toAddress(device.address); ///pokusí se navázat Bluetooth připojení k zařízení na zadané adrese (device.address) a uloží aktivní připojení do proměnné connection. ///čeká na dokončení operace.
       connectedDevice.value = device;
       isConnected.value = true;
       print('Připojeno k ${device.name}');
