@@ -23,6 +23,11 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
   // Debounce timing constants (in milliseconds)
   static const int _debounceDelayNormal = 300; // Normal slider changes
   static const int _debounceDelayAutoClamp = 100; // Auto-clamp SHOULDER when ELBOW changes
+
+  // WRIST safety: when ELBOW is high, limit WRIST to +/- 5° around default (locked only)
+  static const int _wristDefaultAngle = 90;
+  static const int _wristLockDeltaWhenElbowHigh = 5;
+  static const int _elbowBlocksWristFrom = 128;
   
   // Visual indicator constants for SafetyLimitsPainter (public for painter access)
   static const double sliderTrackPadding = 24.0; // Material Design slider default padding
@@ -99,8 +104,15 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
   /// Get min limit for a servo based on lock state
   int _getMinLimit(String servoName) {
     if (servoLocked[servoName]!) {
+      // WRIST: if ELBOW is high, restrict WRIST to +/- 5° around default (LOCKED only)
+      if (servoName == _servoWrist &&
+          servoPositions[_servoElbow]! >= _elbowBlocksWristFrom) {
+        return _wristDefaultAngle - _wristLockDeltaWhenElbowHigh;
+      }
+
       return safetyLimits[servoName]!['min']!;
     }
+
     // Unlocked: allow full range
     return 0;
   }
@@ -111,15 +123,22 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
     if (servoName == _servoElbow) {
       return 158;
     }
-    
+
     if (servoLocked[servoName]!) {
       // SHOULDER has dynamic max based on ELBOW
       if (servoName == _servoShoulder) {
         return _getShoulderMaxAngle();
       }
+
+      // WRIST: if ELBOW is high, restrict WRIST to +/- 5° around default (LOCKED only)
+      if (servoName == _servoWrist &&
+          servoPositions[_servoElbow]! >= _elbowBlocksWristFrom) {
+        return _wristDefaultAngle + _wristLockDeltaWhenElbowHigh;
+      }
+
       return safetyLimits[servoName]!['max']!;
     }
-    
+
     // Unlocked: allow full range up to 180
     return 180;
   }
@@ -131,7 +150,53 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
     return value.clamp(min, max);
   }
 
-  void resetServos() async {
+bool _unlockWarningAccepted = false;
+
+Future<bool> _confirmUnlockIfNeeded() async {
+  if (_unlockWarningAccepted) return true;
+
+  final result = await showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) {
+      return AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Varování'),
+          ],
+        ),
+        content: const Text(
+          'Chystáte se odemknout plný rozsah osy. '
+          'To může mít za následek kolizi nebo poškození robota.\n\n'
+          'Opravdu chcete pokračovat?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Ne'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Ano'),
+          ),
+        ],
+      );
+    },
+  );
+
+  if (result == true) {
+    setState(() {
+      _unlockWarningAccepted = true;
+    });
+    return true;
+  }
+
+  return false;
+}
+
+void resetServos() async {
   final defaultPositions = {
     _servoBase: 84,
     _servoShoulder: 0,
@@ -139,7 +204,7 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
     _servoWrist: 90,
     _servoHand: 90,
   };
-  
+
   for (final servoName in defaultPositions.keys) {
     // Resetovat hodnotu v UI
     setState(() {
@@ -153,12 +218,11 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
     btController.sendServoCommand(pin, defaultPositions[servoName]!, mappedSpeed);
     // Počkej 300ms před dalším servem
     await Future.delayed(const Duration(milliseconds: 500));
-    
   }
 }
 
-  @override
-  Widget build(BuildContext context) {
+@override
+Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Servo Control'),
@@ -242,12 +306,19 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
             IconButton(
               icon: Icon(
                 isLocked ? Icons.lock : Icons.lock_open,
-                color: isLocked ? Colors.red : Colors.green,
+                color: isLocked ? Colors.green : Colors.red,
               ),
               tooltip: isLocked ? 'Zamčeno (bezpečný režim)' : 'Odemčeno (plný rozsah)',
-              onPressed: () {
+              onPressed: () async {
+                // If user is trying to unlock (locked -> unlocked), show warning (until accepted once)
+                if (isLocked) {
+                  final ok = await _confirmUnlockIfNeeded();
+                  if (!ok) return; // user pressed "Ne" => do not unlock
+                }
+
                 setState(() {
                   servoLocked[servoName] = !isLocked;
+
                   // After unlocking/locking, clamp the value to new limits
                   final newValue = _clampServoValue(servoName, currentValue);
                   if (newValue != currentValue) {
@@ -309,6 +380,30 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
                     });
                   }
                 }
+                // If ELBOW changed and WRIST is locked, auto-clamp WRIST (ELBOW>=128 => WRIST 85..95)
+                if (servoName == _servoElbow && servoLocked[_servoWrist]!) {
+                  final wristValue = servoPositions[_servoWrist]!;
+                  final wristMin = _getMinLimit(_servoWrist);
+                  final wristMax = _getMaxLimit(_servoWrist);
+                  final clampedWrist = wristValue.clamp(wristMin, wristMax);
+
+                  if (clampedWrist != wristValue) {
+                    servoPositions[_servoWrist] = clampedWrist;
+
+                    // Cancel WRIST debounce timer if active
+                    _debounceTimers[_servoWrist]?.cancel();
+
+                    // Send updated WRIST position with slight delay to avoid race condition
+                    _debounceTimers[_servoWrist] = Timer(
+                      const Duration(milliseconds: _debounceDelayAutoClamp),
+                      () {
+                        if (servoPositions[_servoWrist] == clampedWrist) {
+                          _sendServoCommand(_servoWrist, clampedWrist);
+                        }
+                      },
+                    );
+                  }
+                }
               });
               
               // Debounced send
@@ -328,11 +423,14 @@ class _ServoControlScreenState extends State<ServoControlScreen> {
   /// Build visual indicators (ticks) for min/max safe limits
   Widget _buildSafetyIndicators(int minLimit, int maxLimit) {
     return Positioned.fill(
-      child: CustomPaint(
-        painter: SafetyLimitsPainter(
-          minLimit: minLimit,
-          maxLimit: maxLimit,
-          totalRange: 180,
+      child: IgnorePointer(
+        ignoring: true,
+        child: CustomPaint(
+          painter: SafetyLimitsPainter(
+            minLimit: minLimit,
+            maxLimit: maxLimit,
+            totalRange: 180,
+          ),
         ),
       ),
     );
