@@ -273,9 +273,11 @@ Widget build(BuildContext context) {
             const SizedBox(height: 20),
             Expanded(
               child: ListView(
-                children: servoPositions.keys.map((servoName) {
-                  return _buildServoControl(servoName);
-                }).toList(),
+                children: [
+                  _buildRobotAxesImageCard(),
+                  const SizedBox(height: 12),
+                  ...servoPositions.keys.map((servoName) => _buildServoControl(servoName)),
+                ],
               ),
             ),
           ],
@@ -335,6 +337,64 @@ Widget build(BuildContext context) {
       ],
     );
   }
+
+  Widget _buildRobotAxesImageCard() {
+  return Card(
+    elevation: 2,
+    child: InkWell(
+      onTap: _openRobotAxesImageViewer,
+      child: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            //const Text(
+              //'Popis os robota (tap pro zvětšení)',
+              //style: TextStyle(fontWeight: FontWeight.w600),
+            //),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.asset(
+                'assets/ui.png',
+                fit: BoxFit.contain,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+void _openRobotAxesImageViewer() {
+  showDialog(
+    context: context,
+    barrierDismissible: true,
+    builder: (ctx) {
+      return Dialog(
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          children: [
+            InteractiveViewer(
+              minScale: 1.0,
+              maxScale: 6.0,
+              child: Image.asset('assets/ui.png'),
+            ),
+            Positioned(
+              top: 4,
+              right: 4,
+              child: IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.of(ctx).pop(),
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
   
   /// Build a slider with visual indicators for safe limits
   Widget _buildLockedSlider(String servoName, int currentValue, int minLimit, int maxLimit, bool isLocked) {
