@@ -22,6 +22,7 @@ class _SequenceScreenState extends State<SequenceScreen> {
   // Custom file
   String? customFilePath;
   String? customFileName;
+  List<int>? customFileBytes;
   
   // Sequence data
   List<SequenceStep> sequenceSteps = [];
@@ -125,7 +126,7 @@ class _SequenceScreenState extends State<SequenceScreen> {
             const SizedBox(height: 16),
 
             // Start/Stop button
-            ElevatedButton(
+            Obx(() => ElevatedButton(
               onPressed: btController.isConnected.value
                   ? (isRunning ? _stopExecution : _startExecution)
                   : null,
@@ -138,7 +139,7 @@ class _SequenceScreenState extends State<SequenceScreen> {
                 isRunning ? 'Stop' : 'Spustit',
                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
-            ),
+            )),
             const SizedBox(height: 20),
 
             // Status area
@@ -211,10 +212,11 @@ class _SequenceScreenState extends State<SequenceScreen> {
         allowedExtensions: ['txt'],
       );
 
-      if (result != null && result.files.single.path != null) {
+      if (result != null) {
         setState(() {
           customFilePath = result.files.single.path;
           customFileName = result.files.single.name;
+          customFileBytes = result.files.single.bytes?.toList();
           errorMessage = null;
           statusMessage = 'Soubor vybrán: $customFileName';
         });
@@ -324,16 +326,8 @@ class _SequenceScreenState extends State<SequenceScreen> {
   }
 
   Future<void> _resetServosForLoop() async {
-    // Reset to default positions (same as resetServos in servo_control.dart)
-    final defaultPositions = {
-      12: 84,   // BASE
-      10: 0,    // SHOULDER
-      8: 158,   // ELBOW
-      2: 90,    // WRIST
-      0: 90,    // HAND
-    };
-
-    for (final entry in defaultPositions.entries) {
+    // Reset to default positions (using shared constant from bluetooth_ovladac.dart)
+    for (final entry in defaultServoPositions.entries) {
       btController.sendServoCommand(entry.key, entry.value, 128); // medium speed
       await Future.delayed(const Duration(milliseconds: 500));
     }
@@ -374,15 +368,9 @@ class _SequenceScreenState extends State<SequenceScreen> {
 
   Future<bool> _loadCustomFile(String filePath) async {
     try {
-      // Note: file_picker provides path, but on mobile we need to read via bytes
-      // For now, we'll use the basic approach - in production you might need platform-specific handling
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['txt'],
-      );
-
-      if (result != null && result.files.single.bytes != null) {
-        final content = String.fromCharCodes(result.files.single.bytes!);
+      // Use stored bytes from file picker
+      if (customFileBytes != null) {
+        final content = String.fromCharCodes(customFileBytes!);
         return _parseSequence(content);
       } else {
         setState(() {
