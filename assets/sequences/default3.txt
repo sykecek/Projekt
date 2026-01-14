@@ -1,0 +1,28 @@
+# Default Sequence 3: Scanning Motion
+# Format: pin,angle,speed,delayMs (or pin,angle,speed with default 300ms delay)
+# Lines starting with # or // are comments
+
+// Scan left to right with base
+12,30,60,1000
+12,150,60,1000
+12,84,60,800
+
+// Nod motion with shoulder and elbow
+10,40,50,600
+8,120,50,600
+10,0,50,600
+8,158,50,600
+
+// Wave with wrist
+2,70,45,400
+2,110,45,400
+2,70,45,400
+2,110,45,400
+2,90,45,400
+
+# Return to default position
+12,84,50
+10,0,50
+8,158,50
+2,90,50
+0,90,50

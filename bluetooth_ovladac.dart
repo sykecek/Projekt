@@ -5,6 +5,15 @@ import 'package:get/get.dart';//GetX knihovna (state management, routování, sn
 import 'package:permission_handler/permission_handler.dart';//knihovna pro dotazování a požadování oprávnění (runtime permissions) na Android/iOS.
 import 'package:flutter/material.dart'; // nutné pro Text, AlertDialog, TextButton
 
+/// Default servo positions (shared across app)
+const Map<int, int> defaultServoPositions = {
+  12: 84,   // BASE
+  10: 0,    // SHOULDER
+  8: 158,   // ELBOW
+  2: 90,    // WRIST
+  0: 90,    // HAND
+};
+
 //class - klíčové slovo Dartu pro definici třídy (objektově orientovaná konstrukce). Třída seskupuje data (proměnné) a chování (metody) dohromady.
 ///BluetoothController - název třídy, která spravuje Bluetooth funkce (skenování, připojení, odesílání dat).
 ///extends GetxController - dědí z GetxController (GetX knihovna), což umožňuje využití reaktivity, správy stavu a životního cyklu kontroleru.
@@ -21,6 +30,7 @@ class BluetoothController extends GetxController {
   var connectedDevice = Rx<BluetoothDevice?>(null); ///reaktivní (Rx) reference na aktuálně připojené zařízení (BluetoothDevice), defaltně null (není připojeno).
   BluetoothConnection? connection; ///proměnná (connection) pro uložení aktivního Bluetooth připojení (BluetoothConnection - class z flutter serial package), může být null (není připojeno).
   var isConnected = false.obs; ///reaktivní (obs) boolean (bool) indikující, zda je zařízení připojeno.
+  var isSequenceRunning = false.obs; ///reaktivní (obs) boolean (bool) indikující, zda probíhá provádění sekvence.
   
   
   String? _lastSentCommand; ///poslední odeslaný příkaz (pro detekci duplicit)

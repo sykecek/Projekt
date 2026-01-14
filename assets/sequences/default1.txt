@@ -1,0 +1,21 @@
+# Default Sequence 1: Basic Wave Motion
+# Format: pin,angle,speed,delayMs
+# Lines starting with # or // are comments
+
+# BASE rotation
+12,84,50,500
+12,120,50,800
+12,60,50,800
+12,84,50,500
+
+# SHOULDER movement
+10,0,50,300
+10,50,50,800
+10,0,50,500
+
+# Return to default position
+12,84,50,300
+10,0,50,300
+8,158,50,300
+2,90,50,300
+0,90,50,300
