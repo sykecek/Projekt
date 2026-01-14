@@ -227,11 +227,11 @@ Widget build(BuildContext context) {
       appBar: AppBar(
         title: const Text('Servo Control'),
         actions: [
-          IconButton(
+          Obx(() => IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: "Reset servů",
-            onPressed: resetServos,
-          ),
+            onPressed: btController.isSequenceRunning.value ? null : resetServos,
+          )),
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: "Odpojit",
@@ -260,16 +260,16 @@ Widget build(BuildContext context) {
             ),
             const SizedBox(height: 20),
             Text("Rychlost serva: $servoSpeed"),
-            Slider(
+            Obx(() => Slider(
               value: servoSpeed.toDouble(),
               min: 0,
               max: 100,
               divisions: 100,
-              onChanged: (value) {
+              onChanged: btController.isSequenceRunning.value ? null : (value) {
                 setState(() => servoSpeed = value.toInt());
                 print('[DEBUG] Změněna rychlost serva na: $servoSpeed');
               },
-            ),
+            )),
             const SizedBox(height: 20),
             Expanded(
               child: ListView(
@@ -277,6 +277,19 @@ Widget build(BuildContext context) {
                   _buildRobotAxesImageCard(),
                   const SizedBox(height: 12),
                   ...servoPositions.keys.map((servoName) => _buildServoControl(servoName)),
+                  const SizedBox(height: 20),
+                  // SEKVENCE button
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.playlist_play),
+                    label: const Text('SEKVENCE', style: TextStyle(fontSize: 18)),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      backgroundColor: Colors.indigo,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: () => Get.toNamed('/sequence'),
+                  ),
+                  const SizedBox(height: 12),
                 ],
               ),
             ),
@@ -305,13 +318,13 @@ Widget build(BuildContext context) {
               ),
             ),
             // Lock/Unlock button
-            IconButton(
+            Obx(() => IconButton(
               icon: Icon(
                 isLocked ? Icons.lock : Icons.lock_open,
                 color: isLocked ? Colors.green : Colors.red,
               ),
               tooltip: isLocked ? 'Zamčeno (bezpečný režim)' : 'Odemčeno (plný rozsah)',
-              onPressed: () async {
+              onPressed: btController.isSequenceRunning.value ? null : () async {
                 // If user is trying to unlock (locked -> unlocked), show warning (until accepted once)
                 if (isLocked) {
                   final ok = await _confirmUnlockIfNeeded();
@@ -329,7 +342,7 @@ Widget build(BuildContext context) {
                   }
                 });
               },
-            ),
+            )),
           ],
         ),
         _buildLockedSlider(servoName, currentValue, minLimit, maxLimit, isLocked),
@@ -398,7 +411,7 @@ void _openRobotAxesImageViewer() {
   
   /// Build a slider with visual indicators for safe limits
   Widget _buildLockedSlider(String servoName, int currentValue, int minLimit, int maxLimit, bool isLocked) {
-    return SliderTheme(
+    return Obx(() => SliderTheme(
       data: SliderTheme.of(context).copyWith(
         // Customize slider appearance based on lock state
         activeTrackColor: isLocked ? Colors.blue : Colors.indigo,
@@ -416,7 +429,7 @@ void _openRobotAxesImageViewer() {
             max: 180,
             divisions: 180,
             label: currentValue.toString(),
-            onChanged: (newAngle) {
+            onChanged: btController.isSequenceRunning.value ? null : (newAngle) {
               setState(() {
                 // Clamp to limits if locked
                 final clampedValue = _clampServoValue(servoName, newAngle.toInt());
@@ -477,7 +490,7 @@ void _openRobotAxesImageViewer() {
           if (isLocked) _buildSafetyIndicators(minLimit, maxLimit),
         ],
       ),
-    );
+    ));
   }
   
   /// Build visual indicators (ticks) for min/max safe limits

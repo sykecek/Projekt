@@ -1,0 +1,27 @@
+# Default Sequence 2: Grab and Release
+# Format: pin,angle,speed,delayMs
+# Lines starting with # or // are comments
+
+# Open hand
+0,30,40,800
+
+# Move to grab position
+10,60,50,600
+8,100,50,600
+2,80,50,400
+
+# Close hand (grab)
+0,90,40,1000
+
+# Lift
+8,140,50,800
+10,20,50,600
+
+# Release
+0,30,40,800
+
+# Return to default
+10,0,50,500
+8,158,50,500
+2,90,50,300
+0,90,50,300

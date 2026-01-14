@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'bluetooth_ovladac,servo_control/bluetooth_ovladac.dart';
-import 'bluetooth_ovladac,servo_control/servo_control.dart';
+import 'bluetooth_ovladac.dart';
+import 'servo_control.dart';
+import 'sequence_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,6 +25,7 @@ class MyApp extends StatelessWidget {
       getPages: [
         GetPage(name: '/', page: () => const HomeScreen()),
         GetPage(name: '/servo-control', page: () => const ServoControlScreen()),
+        GetPage(name: '/sequence', page: () => const SequenceScreen()),
       ],
       initialRoute: '/',
     );

@@ -21,6 +21,7 @@ class BluetoothController extends GetxController {
   var connectedDevice = Rx<BluetoothDevice?>(null); ///reaktivní (Rx) reference na aktuálně připojené zařízení (BluetoothDevice), defaltně null (není připojeno).
   BluetoothConnection? connection; ///proměnná (connection) pro uložení aktivního Bluetooth připojení (BluetoothConnection - class z flutter serial package), může být null (není připojeno).
   var isConnected = false.obs; ///reaktivní (obs) boolean (bool) indikující, zda je zařízení připojeno.
+  var isSequenceRunning = false.obs; ///reaktivní (obs) boolean (bool) indikující, zda probíhá provádění sekvence.
   
   
   String? _lastSentCommand; ///poslední odeslaný příkaz (pro detekci duplicit)
