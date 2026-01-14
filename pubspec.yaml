@@ -24,3 +24,9 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/ui.png
+
+dependency_overrides:
+  flutter_bluetooth_serial:
+    path: packages/flutter_bluetooth_serial-a76b5f22e81612104a8dc461705c2bba2903011a
