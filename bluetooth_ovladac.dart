@@ -1,12 +1,12 @@
-import 'dart:convert'; // for utf8 encoding
+import 'dart:convert'; // pro utf8 encoding ,UTF-8 formát (8-bi) je standard pro textová data v síťové komunikaci, standardní kódování znaků, které umožňuje reprezentovat všechny znaky Unicode (včetně světových abeced, symbolů, emoji) pomocí proměnlivého počtu bytů (1-4 bajty na znak).
 import 'dart:typed_data'; //poskytuje typy pro binární data, např. Uint8List (pole bajtů)
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart'; //3rd‑party balíček pro klasické (Classic) Bluetooth SPP na Flutteru (připojení k HC‑05, čtení/zápis přes socket).
 import 'package:get/get.dart';//GetX knihovna (state management, routování, snackbar, dependency injection). Používá se zde hlavně pro kontroler, reaktivitu a navigaci.
 import 'package:permission_handler/permission_handler.dart';//knihovna pro dotazování a požadování oprávnění (runtime permissions) na Android/iOS.
 import 'package:flutter/material.dart'; // nutné pro Text, AlertDialog, TextButton
 
-/// Default servo positions (shared across app)
-const Map<int, int> defaultServoPositions = {
+/// Výchozí pozice serv, využívá se při inicializaci a resetu serv
+const Map<int, int> defaultServoPositions = { ///definuje konstantní (const) mapu (Map) s klíči typu int (čísla pinů) a hodnotami typu int (úhly serv), která obsahuje výchozí pozice pro jednotlivé serva. tyto klíče-hodnoty páry se využívaji v konkrétní funkcich jako je resetServos pro nastavení serv na výchozí pozice.
   12: 84,   // BASE
   10: 0,    // SHOULDER
   8: 158,   // ELBOW
@@ -31,7 +31,6 @@ class BluetoothController extends GetxController {
   BluetoothConnection? connection; ///proměnná (connection) pro uložení aktivního Bluetooth připojení (BluetoothConnection - class z flutter serial package), může být null (není připojeno).
   var isConnected = false.obs; ///reaktivní (obs) boolean (bool) indikující, zda je zařízení připojeno.
   var isSequenceRunning = false.obs; ///reaktivní (obs) boolean (bool) indikující, zda probíhá provádění sekvence.
-  
   
   String? _lastSentCommand; ///poslední odeslaný příkaz (pro detekci duplicit)
 
@@ -121,63 +120,63 @@ class BluetoothController extends GetxController {
 
   /// Připojení k zařízení (např. HC-05)
   Future<void> connectToDevice(BluetoothDevice device) async { ///asynchronní metoda pro připojení k zadanému Bluetooth zařízení. ///vrací Future<void> (nevrací žádnou hodnotu). ///parametr device typu BluetoothDevice představuje zařízení, ke kterému se chceme připojit.
-    try { ///začátek bloku pro zachycení chyb během připojování.
+    try { ///začátek bloku pro zachycení chyb během připojování. ///pokud dojde k chybě, provede se kód v catch bloku.
       connection = await BluetoothConnection.toAddress(device.address); ///pokusí se navázat Bluetooth připojení k zařízení na zadané adrese (device.address) a uloží aktivní připojení do proměnné connection. ///čeká na dokončení operace.
-      connectedDevice.value = device;
-      isConnected.value = true;
-      print('Připojeno k ${device.name}');
-      Get.toNamed('/servo-control');
-    } catch (e) {
-      print('Chyba při připojování: $e');
-      isConnected.value = false;
-      Get.snackbar(
-        'Chyba připojení',
-        '(${e.runtimeType})',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Get.theme.colorScheme.error,
-        colorText: Get.theme.colorScheme.onError,
-        duration: const Duration(seconds: 4),
-        maxWidth: 320,
+      connectedDevice.value = device; ///nastaví reaktivní proměnnou connectedDevice na právě připojené zařízení.
+      isConnected.value = true; ///nastaví indikátor připojení na true (zařízení je připojeno).
+      print('Připojeno k ${device.name}'); ///vypíše do konzole zprávu o úspěšném připojení k zařízení.
+      Get.toNamed('/servo-control'); ///naviguje na obrazovku pro ovládání serv pomocí GetX routování.
+    } catch (e) { ///blok pro zachycení chyb, pokud dojde k výjimce během připojování.
+      print('Chyba při připojování: $e'); ///vypíše do konzole zprávu o chybě při připojování spolu s detailem výjimky.
+      isConnected.value = false; ///nastaví indikátor připojení na false (zařízení není připojeno).
+      Get.snackbar( ///zobrazí snackbar (dočasnou notifikaci) pomocí GetX knihovny s informací o chybě.
+        'Chyba připojení', ///název snackbaru.
+        '(${e.runtimeType})', ///zpráva snackbaru zobrazující typ výjimky.
+        snackPosition: SnackPosition.BOTTOM, ///umístění snackbaru na spodní část obrazovky.
+        backgroundColor: Get.theme.colorScheme.error, ///nastaví pozadí snackbaru na chybovou barvu z aktuálního tématu.
+        colorText: Get.theme.colorScheme.onError, ///nastaví barvu textu snackbaru na vhodnou barvu pro chybové pozadí.
+        duration: const Duration(seconds: 4), ///doba zobrazení snackbaru (4 sekundy).
+        maxWidth: 320, ///maximální šířka snackbaru.
       );
     }
   }
 
   /// Odeslání příkazu na Arduino přes Bluetooth SPP
-  void sendServoCommand(int pin, int angle, int speed) {
-    if (connection != null && connection!.isConnected) {
-      String command = '$pin,$angle,$speed\n';
+  void sendServoCommand(int pin, int angle, int speed) { ///metoda pro odeslání příkazu k ovládání serva na Arduino přes Bluetooth SPP. ///parametry: pin (číslo pinu serva), angle (úhel serva), speed (rychlost pohybu). ///SendServoCommand - název metody - z knihovny flutter_bluetooth_serial. funkce vrací void (nevrací žádnou hodnotu), protože pouze odesílá data přes Bluetooth.
+    if (connection != null && connection!.isConnected) { ///zkontroluje, zda je aktivní připojení k zařízení. /// connection != null - připojení není null /// connection!.isConnected - připojení je aktivní
+      String command = '$pin,$angle,$speed\n'; ///sestaví příkaz ve formátu "pin,angle,speed" následovaný novým řádkem.
       
-      // Coalesce repeated values - skip if same as last command
-      if (command == _lastSentCommand) {
-        print('[DEBUG] Skipping redundant command: $command');
-        return;
+      /// Detekce a prevence odeslání duplicitního příkazu
+      if (command == _lastSentCommand) { ///pokud je aktuální příkaz stejný jako poslední odeslaný příkaz
+        print('[DEBUG] Skipping redundant command: $command'); ///vypíše debug zprávu o přeskočení duplicitního příkazu
+        return; ///ukončí metodu bez odeslání příkazu
       }
       
-      print('[DEBUG] Pokus o odeslání: $command');
-      // Use UTF-8 encoding instead of codeUnits
-      connection!.output.add(Uint8List.fromList(utf8.encode(command)));
-      connection!.output.allSent.then((_) {
-        print('Příkaz odeslán: $command');
-        _lastSentCommand = command;
+      print('[DEBUG] Pokus o odeslání: $command');///vypíše debug zprávu o pokusu o odeslání příkazu
+      /// Odeslání příkazu jako bajtové pole, zakódované jako UTF-8
+      connection!.output.add(Uint8List.fromList(utf8.encode(command)));///převede příkaz na pole bajtů (Uint8List) pomocí UTF-8 kódování a přidá ho do výstupního bufferu připojení.
+      connection!.output.allSent.then((_) { ///čeká, až budou všechna data odeslána.
+        print('Příkaz odeslán: $command'); ///vypíše do konzole zprávu o úspěšném odeslání příkazu.
+        _lastSentCommand = command; ///uloží aktuální příkaz jako poslední odeslaný příkaz pro detekci duplicit.
       });
     } else {
-      print('Zařízení není připojeno!');
+      print('Zařízení není připojeno!'); ///vypíše do konzole zprávu, že zařízení není připojeno.
     }
   }
 
   /// Odpojení od zařízení
-  void disconnect() {
-    connection?.dispose();
-    connection = null;
-    isConnected.value = false;
-    connectedDevice.value = null;
-    _lastSentCommand = null;
-    print('[DEBUG] Odpojeno od zařízení.');
+  void disconnect() { ///metoda pro odpojení od aktuálně připojeného Bluetooth zařízení.
+    connection?.dispose(); ///pokud existuje aktivní připojení (connection není null), zavolá metodu dispose() pro uvolnění zdrojů a ukončení připojení.
+    connection = null; ///nastaví proměnnou connection na null (není připojeno).
+    isConnected.value = false; ///nastaví indikátor připojení na false (zařízení není připojeno).
+    connectedDevice.value = null; ///nastaví aktuálně připojené zařízení na null (není připojeno).
+    _lastSentCommand = null; ///vymaže poslední odeslaný příkaz.
+    print('[DEBUG] Odpojeno od zařízení.'); ///vypíše do konzole zprávu o odpojení od zařízení.
   }
 
-  @override
-  void onClose() {
-    disconnect();
-    super.onClose();
+  @override /// přepis metody z GetxController pro čištění při uzavření kontroleru
+  void onClose() { ///metoda volaná při uzavření kontroleru (např. při ukončení aplikace nebo navigaci pryč).
+    disconnect(); ///zavolá metodu disconnect() pro odpojení od zařízení a uvolnění zdrojů.
+    super.onClose(); ///volá metodu onClose() z nadřazené třídy (GetxController) pro provedení dalších úklidových operací. super - odkaz na nadřazenou třídu
   }
 }
