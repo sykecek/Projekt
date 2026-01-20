@@ -19,17 +19,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.initState();
     final SettingsController settingsController = Get.find<SettingsController>();
     // Initialize controllers with current values
-    settingsController.defaultAngles.forEach((key, value) {
-      _angleControllers[key] = TextEditingController(text: value.toString());
-    });
+    for (final entry in settingsController.defaultAngles.entries) {
+      _angleControllers[entry.key] = TextEditingController(text: entry.value.toString());
+    }
   }
 
   @override
   void dispose() {
     // Dispose all controllers
-    _angleControllers.forEach((key, controller) {
+    for (final controller in _angleControllers.values) {
       controller.dispose();
-    });
+    }
     super.dispose();
   }
 
@@ -128,9 +128,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           settingsController.resetToFactoryDefaults();
                           // Update controllers with reset values
                           setState(() {
-                            settingsController.defaultAngles.forEach((key, value) {
-                              _angleControllers[key]?.text = value.toString();
-                            });
+                            for (final entry in settingsController.defaultAngles.entries) {
+                              _angleControllers[entry.key]?.text = entry.value.toString();
+                            }
                           });
                           Get.snackbar(
                             'Úspěch',
