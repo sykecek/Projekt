@@ -2,6 +2,7 @@ import 'dart:async'; ///import pro práci s asynchronními operacemi a časovač
 import 'package:flutter/material.dart';///import pro Flutter materiální design komponenty a widgety., materiální design je vizuální jazyk vyvinutý Googlem pro vytváření konzistentních a esteticky příjemných uživatelských rozhraní.
 import 'package:get/get.dart';///import pro GetX knihovnu, která poskytuje state management, routování, snackbar, dependency injection a další užitečné funkce pro Flutter aplikace.
 import 'bluetooth_ovladac.dart'; ///import pro vlastní třídu BluetoothController z lokálního souboru bluetooth_ovladac.dart., tato třída pravděpodobně obsahuje logiku pro správu Bluetooth připojení a komunikaci s Bluetooth zařízeními.
+import 'settings_controller.dart'; ///import pro SettingsController
 /// widget = základní stavební blok uživatelského rozhraní ve Flutteru. Widgety mohou být buď statické (StatelessWidget) nebo stavové (StatefulWidget).
 class ServoControlScreen extends StatefulWidget { ///class ServoControlScreen extends StatefulWidget => definice nové třídy ServoControlScreen, která je stavovým widgetem (StatefulWidget). Stavové widgety umožňují mít vnitřní stav, který se může měnit během životního cyklu widgetu.
   const ServoControlScreen({Key? key}) : super(key: key); ///konstruktor třídy ServoControlScreen, který přijímá volitelný parametr key (klíč widgetu) a předává ho do nadřazené třídy StatefulWidget pomocí super(key: key). Klíče se používají k identifikaci widgetů v rámci stromu widgetů Flutteru. super(key: key) - volání konstruktoru nadřazené třídy s předáním klíče.
@@ -12,6 +13,7 @@ class ServoControlScreen extends StatefulWidget { ///class ServoControlScreen ex
 
 class _ServoControlScreenState extends State<ServoControlScreen> { ///definice třídy _ServoControlScreenState, která rozšiřuje třídu State<ServoControlScreen>. Tato třída obsahuje stav a logiku pro widget ServoControlScreen. Podtržítko (_) na začátku názvu třídy označuje, že je tato třída soukromá a neměla by být přístupná z jiných souborů.
   final BluetoothController btController = Get.find<BluetoothController>(); ///inicializace instance BluetoothController pomocí GetX dependency injection (dependency injection = technika, kdy jsou závislosti objektu poskytovány z vnějšího zdroje místo toho, aby si je objekt vytvářel sám). Tato instance je použita pro správu Bluetooth připojení a komunikaci s Bluetooth zařízeními.
+  final SettingsController settingsController = Get.find<SettingsController>(); ///inicializace instance SettingsController pomocí GetX
 
   // Servo name constants to avoid typos
   static const String _servoBase = 'BASE (pin 12)'; ///konstanta pro název serva BASE s informací o připojeném pinu (pin 12). Používá se k identifikaci tohoto serva v aplikaci a k zabránění překlepům při odkazování na něj.
@@ -40,6 +42,24 @@ class _ServoControlScreenState extends State<ServoControlScreen> { ///definice t
     _servoWrist: 90, ///výchozí pozice pro servo WRIST (90°)
     _servoHand: 90, ///výchozí pozice pro servo HAND (90°)
   };
+  
+  @override
+  void initState() {
+    super.initState();
+    // Načtení výchozích pozic ze SettingsController při inicializaci
+    _loadDefaultPositions();
+  }
+  
+  void _loadDefaultPositions() {
+    final defaultAnglesMap = settingsController.getDefaultAnglesMap();
+    setState(() {
+      servoPositions[_servoBase] = defaultAnglesMap[12] ?? 84;
+      servoPositions[_servoShoulder] = defaultAnglesMap[10] ?? 0;
+      servoPositions[_servoElbow] = defaultAnglesMap[8] ?? 158;
+      servoPositions[_servoWrist] = defaultAnglesMap[2] ?? 90;
+      servoPositions[_servoHand] = defaultAnglesMap[0] ?? 90;
+    });
+  }
   int servoSpeed = 50; ///počáteční rychlost serv (50 na škále 0-100) využívá se ve funkci for final int mappedSpeed = (servoSpeed * 254 / 100).round() + 1; v resetServos pro mapování rychlosti z UI rozsahu 0-100 na Arduino rozsah 1-255
   
   /// tato mapa (mapa = datová struktura pro ukládání párů klíč-hodnota) uchovává stav zámku (locked/unlocked) pro jednotlivá serva, kde klíčem je název serva (String) a hodnotou je boolean (true = zamčeno, false = odemčeno). Výchozí stav je, že všechna serva jsou zamčená (true). Tato informace se využívá při výpočtu bezpečnostních limitů pro pohyb serv v metodách _getMinLimit a _getMaxLimit.
@@ -203,28 +223,37 @@ Future<bool> _confirmUnlockIfNeeded() async { ///asynchronní metoda pro zobraze
 //<-- Servo reset sekce -->// <--------------------------------------------------------------------
 
 void resetServos() async {////asynchronní metoda pro resetování všech serv na jejich výchozí pozice. Metoda je označena jako async, což znamená, že může obsahovat asynchronní operace (např. čekání na dokončení úkolů).
-  final defaultPositions = {///mapa pro uložení výchozích pozic jednotlivých serv, kde klíčem je název serva (String) a hodnotou je jeho výchozí úhel (int).
-    _servoBase: 84,///výchozí pozice pro servo základny
-    _servoShoulder: 0,///výchozí pozice pro servo ramene
-    _servoElbow: 158, ///výchozí pozice pro servo lokte
-    _servoWrist: 90,///výchozí pozice pro servo zápěstí
-    _servoHand: 90,///výchozí pozice pro servo ruky
+  final defaultPositions = settingsController.getDefaultAnglesMap(); ///získání výchozích pozic ze SettingsController
+  
+  // Mapping servo names to pins
+  final servoNameToPin = {
+    _servoBase: 12,
+    _servoShoulder: 10,
+    _servoElbow: 8,
+    _servoWrist: 2,
+    _servoHand: 0,
   };
 
-  ///Tato funkce projde všechny serva a jejich výchozí pozice z konstantní mapy defaultPositions, resetuje jejich hodnoty v uživatelském rozhraní (UI) a odešle příkazy na nastavení těchto výchozích pozic na serva přes Bluetooth. Po odeslání příkazu na každé servo počká 500 ms před pokračováním na další servo, aby se předešlo zahlcení komunikace.
-  for (final servoName in defaultPositions.keys) { ///projde všechny serva a jejich výchozí pozice z konstantní mapy defaultPositions
+  ///Tato funkce projde všechny serva a jejich výchozí pozice z mapy defaultPositions, resetuje jejich hodnoty v uživatelském rozhraní (UI) a odešle příkazy na nastavení těchto výchozích pozic na serva přes Bluetooth. Po odeslání příkazu na každé servo počká 500 ms před pokračováním na další servo, aby se předešlo zahlcení komunikace.
+  for (final entry in servoNameToPin.entries) {
+    final servoName = entry.key;
+    final pin = entry.value;
+    final defaultAngle = defaultPositions[pin];
+    
+    if (defaultAngle == null) continue;
+    
     // Resetovat hodnotu v UI
-    setState(() { ///aktualizace stavu widgetu
-      servoPositions[servoName] = defaultPositions[servoName]!; ///nastavení aktuální pozice serva v mapě servoPositions na jeho výchozí hodnotu z mapy defaultPositions
+    setState(() {
+      servoPositions[servoName] = defaultAngle;
     });
-    // Odeslat příkaz na servo
-    final int pin = servoPins[servoName]!;///získání čísla pinu pro dané servo z mapy servoPins
+    
     // Mapování rychlosti z UI rozsahu 0-100 na Arduino rozsah 1-255
-    final int mappedSpeed = (servoSpeed * 254 / 100).round() + 1; ///mapování rychlosti serva z uživatelského rozhraní (UI) rozsahu 0-100 na rozsah 1-255 používaný v Arduino. Výpočet se provádí tak, že se rychlost z UI (servoSpeed) vynásobí 254 a vydělí 100, poté se zaokrouhlí na nejbližší celé číslo pomocí metody round() a nakonec se přičte 1, aby se zajistilo, že minimální hodnota je 1 (Arduino nepodporuje rychlost 0).
-    print('[DEBUG] Reset: Posílám výchozí hodnotu pro $servoName (pin $pin): ${defaultPositions[servoName]} při rychlosti $mappedSpeed'); ///výpis debug informace do konzole, která obsahuje název serva (servoName), číslo pinu (pin), výchozí hodnotu serva (defaultPositions[servoName]) a mapovanou rychlost (mappedSpeed). Tato informace je užitečná pro sledování odesílaných příkazů během vývoje a ladění aplikace.
-    btController.sendServoCommand(pin, defaultPositions[servoName]!, mappedSpeed);///odeslání příkazu na servo pomocí metody sendServoCommand z objektu btController, která bere jako parametry číslo pinu (pin), výchozí hodnotu serva (defaultPositions[servoName]!) a mapovanou rychlost (mappedSpeed).  
+    final int mappedSpeed = (servoSpeed * 254 / 100).round() + 1;
+    print('[DEBUG] Reset: Posílám výchozí hodnotu pro $servoName (pin $pin): $defaultAngle při rychlosti $mappedSpeed');
+    btController.sendServoCommand(pin, defaultAngle, mappedSpeed);
+    
     // Počkej 500ms před dalším servem
-    await Future.delayed(const Duration(milliseconds: 500));///čekání 500 ms před pokračováním na další servo, aby se předešlo zahlcení komunikace. await znamená, že metoda počká na dokončení této asynchronní operace před pokračováním.
+    await Future.delayed(const Duration(milliseconds: 500));
   }
 }
 
@@ -246,6 +275,11 @@ Widget build(BuildContext context) {/// metoda build, která bere jako parametr 
             tooltip: "Reset servů",///tooltip tlačítka (zobrazí se při podržení myši nebo dlouhém stisku)
               onPressed: btController.isSequenceRunning.value ? null : resetServos,///akce při stisknutí tlačítka, pokud není spuštěna sekvence (btController.isSequenceRunning.value je false), zavolá se metoda resetServos, jinak je tlačítko deaktivováno (null)
             )),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: 'Nastavení',
+            onPressed: () => Get.toNamed('/settings'),
+          ),
           IconButton(///tlačítko pro odpojení Bluetooth s ikonou logout
             icon: const Icon(Icons.logout),////ikona tlačítka (logout)
             tooltip: "Odpojit",///tooltip tlačítka (zobrazí se při podržení myši nebo dlouhém stisku)

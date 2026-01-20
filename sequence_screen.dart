@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';///knihovna pro přístup k assetům a pl
 import 'package:get/get.dart';///import pro práci s GetX knihovnou ve Flutteru., GetX je populární knihovna pro správu stavu, navigaci a závislostí ve Flutter aplikacích.
 import 'package:file_picker/file_picker.dart';///import pro práci s výběrem souborů ve Flutteru., umožňuje uživatelům vybírat soubory z jejich zařízení pomocí nativního dialogu pro výběr souborů.
 import 'bluetooth_ovladac,servo_control/bluetooth_ovladac.dart';///import pro práci s Bluetooth ovladačem a servo kontrolérem., tento soubor pravděpodobně obsahuje třídu BluetoothController, která spravuje připojení a komunikaci s Bluetooth zařízením.
+import 'settings_controller.dart'; ///import pro SettingsController
 import 'utils/file_bytes_reader.dart';
 
 class SequenceScreen extends StatefulWidget {///třída SequenceScreen představuje obrazovku pro správu a spuštění sekvencí pohybů serv., dědí od StatefulWidget, což znamená, že má stav, který se může měnit během životního cyklu widgetu.
@@ -15,6 +16,7 @@ class SequenceScreen extends StatefulWidget {///třída SequenceScreen představ
 
 class _SequenceScreenState extends State<SequenceScreen> {///třída _SequenceScreenState představuje stav pro obrazovku SequenceScreen., dědí od State<SequenceScreen>, což znamená, že je specifická pro widget SequenceScreen.
   final BluetoothController btController = Get.find<BluetoothController>();///získání instance BluetoothController pomocí GetX dependency injection., tato instance umožňuje komunikaci s Bluetooth zařízením a správu připojení.
+  final SettingsController settingsController = Get.find<SettingsController>(); ///získání instance SettingsController pomocí GetX
 
   // Zdroj sekvence
   String selectedSource = 'Default 1'; ///výchozí vybraný zdroj sekvence je 'Default 1'.
@@ -58,6 +60,13 @@ class _SequenceScreenState extends State<SequenceScreen> {///třída _SequenceSc
             Get.back();///navigace zpět na předchozí obrazovku.
           },
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: 'Nastavení',
+            onPressed: () => Get.toNamed('/settings'),
+          ),
+        ],
       ),
       body: Padding(///Padding přidává vnitřní odsazení kolem svého dítěte.
         padding: const EdgeInsets.all(16.0),///odsazení 16 pixelů ze všech stran.
@@ -361,8 +370,9 @@ class _SequenceScreenState extends State<SequenceScreen> {///třída _SequenceSc
   /// 1. Odešle příkaz pro nastavení serva na daném pinu (entry.key) na výchozí úhel (entry.value) s rychlostí 128 pomocí Bluetooth controlleru.
   /// 2. Po odeslání příkazu počká 500 milisekund, aby serva měla čas se plynule přesunout na nové pozice.
   Future<void> _resetServosForLoop() async { ///metoda pro resetování pozic serv na výchozí hodnoty před restartem sekvence v režimu smyčky (loop)., tato metoda odesílá příkazy pro nastavení všech serv na jejich výchozí pozice a čeká mezi jednotlivými příkazy, aby se serva mohla plynule přesunout na nové pozice.
-    // Reset do defaultních pozic (z bluetooth_ovladac.dart), 
-    for (final entry in defaultServoPositions.entries) {///iterace přes všechny výchozí pozice serv definované v defaultServoPositions., entry je pár klíč-hodnota, kde key je pin serva a value je výchozí úhel.
+    // Reset do defaultních pozic ze SettingsController
+    final defaultPositions = settingsController.getDefaultAnglesMap();
+    for (final entry in defaultPositions.entries) {///iterace přes všechny výchozí pozice serv definované v defaultServoPositions., entry je pár klíč-hodnota, kde key je pin serva a value je výchozí úhel.
       btController.sendServoCommand(entry.key, entry.value, 128); /// odeslání příkazu pro nastavení serva na daném pinu (entry.key) na výchozí úhel (entry.value) s rychlostí 128 pomocí Bluetooth controlleru.
       await Future.delayed(const Duration(milliseconds: 500));///počká 500 milisekund, aby serva měla čas se plynule přesunout na nové pozice., await se používá k čekání na dokončení asynchronní operace zpoždění, což umožňuje plynulé provedení příkazů jeden po druhém.
     }
@@ -473,9 +483,9 @@ class _SequenceScreenState extends State<SequenceScreen> {///třída _SequenceSc
           final delayMs = parts.length == 4 ? int.parse(parts[3].trim()) : 300; ///převedení čtvrté části na int pro zpoždění v milisekundách (delayMs), pokud je k dispozici., pokud čtvrtá část neexistuje, nastaví se výchozí hodnota 300 ms., parts.length == 4 ? int.parse(parts[3].trim()) : 300 je podmíněný výraz (ternary operator), který říká: "Pokud je počet částí roven 4, převed' čtvrtou část na int po odstranění přebytečných mezer pomocí trim(), jinak použij hodnotu 300." Tato hodnota reprezentuje zpoždění v milisekundách před provedením dalšího kroku sekvence. ? znamená "pokud" a : znamená "jinak".
 
           // Validování hodnot
-          if (!defaultServoPositions.containsKey(pin)) { ///kontrola, zda je pin jeden z povolených pinů pro výchozího robota (klíče z defaultServoPositions). Pokud není, nastaví se chybová zpráva a metoda vrátí false.
+          if (!settingsController.getDefaultAnglesMap().containsKey(pin)) { ///kontrola, zda je pin jeden z povolených pinů pro výchozího robota (klíče z SettingsController). Pokud není, nastaví se chybová zpráva a metoda vrátí false.
             setState(() {///;volání setState pro aktualizaci stavu widgetu.
-              errorMessage = 'Chyba na řádku ${i + 1}: Nepovolený pin $pin (povolené: ${defaultServoPositions.keys.join(', ')})';///nastavení chybové zprávy s informací o povolených pinech., ${i + 1} se používá k zobrazení lidsky čitelného čísla řádku (začínající od 1 místo 0).
+              errorMessage = 'Chyba na řádku ${i + 1}: Nepovolený pin $pin (povolené: ${settingsController.getDefaultAnglesMap().keys.join(', ')})';///nastavení chybové zprávy s informací o povolených pinech., ${i + 1} se používá k zobrazení lidsky čitelného čísla řádku (začínající od 1 místo 0).
             });
             return false;
           }
