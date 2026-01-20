@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';///knihovna pro přístup k assetům a pl
 import 'package:get/get.dart';///import pro práci s GetX knihovnou ve Flutteru., GetX je populární knihovna pro správu stavu, navigaci a závislostí ve Flutter aplikacích.
 import 'package:file_picker/file_picker.dart';///import pro práci s výběrem souborů ve Flutteru., umožňuje uživatelům vybírat soubory z jejich zařízení pomocí nativního dialogu pro výběr souborů.
 import 'bluetooth_ovladac,servo_control/bluetooth_ovladac.dart';///import pro práci s Bluetooth ovladačem a servo kontrolérem., tento soubor pravděpodobně obsahuje třídu BluetoothController, která spravuje připojení a komunikaci s Bluetooth zařízením.
+import 'utils/file_bytes_reader.dart';
 
 class SequenceScreen extends StatefulWidget {///třída SequenceScreen představuje obrazovku pro správu a spuštění sekvencí pohybů serv., dědí od StatefulWidget, což znamená, že má stav, který se může měnit během životního cyklu widgetu.
   const SequenceScreen({Key? key}) : super(key: key);///konstruktor třídy SequenceScreen, který přijímá volitelný parametr key pro identifikaci widgetu ve stromu widgetů. ({Key? key}) je volitelný pojmenovaný parametr, který může být předán při vytváření instance třídy. Tento parametr je typu Key?, což znamená, že může být buď instancí třídy Key, nebo null. Pokud není předán žádný klíč, použije se výchozí hodnota null. super(key: key) volá konstruktor nadřazené třídy (StatefulWidget) a předává mu tento klíč. Key je proměnná, která slouží k identifikaci widgetu ve stromu widgetů Flutteru. Pomáhá Flutteru rozlišit mezi různými instancemi widgetů, zejména při aktualizacích uživatelského rozhraní.
@@ -230,6 +231,7 @@ class _SequenceScreenState extends State<SequenceScreen> {///třída _SequenceSc
       FilePickerResult? result = await FilePicker.platform.pickFiles(///otevření dialogu pro výběr souboru., čekání na výběr souboru uživatelem., ukládá výsledek do proměnné result., FilePickerResult? znamená, že proměnná může být typu FilePickerResult nebo null., ? označuje, že proměnná je nullable, tedy může obsahovat hodnotu null., filePicker.platform.pickFiles je metoda z FilePicker knihovny, která otevírá nativní dialog pro výběr souboru na dané platformě (Android, iOS, web, atd.).
         type: FileType.custom,///;typ souboru je vlastní (custom)., umožňuje specifikovat konkrétní přípony souborů, které mohou být vybrány.
         allowedExtensions: ['txt'],///;povolené přípony souborů jsou pouze .txt., uživatel může vybrat pouze textové soubory.
+        withData: true,///;na Androidu je bytes často null bez withData (zejména přes Dokumenty/SAF)
       );
 
       if (result != null) {///pokud byl vybrán soubor (result není null)
@@ -418,10 +420,17 @@ class _SequenceScreenState extends State<SequenceScreen> {///třída _SequenceSc
         final content = String.fromCharCodes(customFileBytes!); ///převedení bajtů na řetězec pomocí String.fromCharCodes., ! znamená, že proměnná customFileBytes není null (force unwrapping)., obsah souboru je nyní uložen v proměnné content jako řetězec.
         return _parseSequence(content);///;parsování načteného obsahu sekvence pomocí metody _parseSequence., vrací true, pokud bylo parsování úspěšné, jinak false. parsování znamená převod textového obsahu na strukturovaná data (kroky sekvence).
       } else {///;pokud bajty nejsou k dispozici, pokusí se načíst obsah souboru z disku.
-        setState(() {///;volání setState pro aktualizaci stavu widgetu.
-          errorMessage = 'Nelze načíst obsah souboru'; ///nastavení chybové zprávy, pokud nelze načíst obsah souboru.
-        });
-        return false;///vrácení false, pokud nelze načíst obsah souboru.
+        final bytes = await readFileBytesFromPath(filePath);
+        if (bytes == null) {
+          setState(() {///;volání setState pro aktualizaci stavu widgetu.
+            errorMessage = 'Nelze načíst obsah souboru'; ///nastavení chybové zprávy, pokud nelze načíst obsah souboru.
+          });
+          return false;///vrácení false, pokud nelze načíst obsah souboru.
+        }
+
+        customFileBytes = bytes;
+        final content = String.fromCharCodes(bytes);
+        return _parseSequence(content);
       }
     } catch (e) {///zachycení výjimky při načítání vlastního souboru, například pokud dojde k chybě během procesu čtení souboru.
       setState(() { ///volání setState pro aktualizaci stavu widgetu.
