@@ -3,8 +3,35 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'settings_controller.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  // TextEditingControllers for angle inputs
+  final Map<String, TextEditingController> _angleControllers = {};
+
+  @override
+  void initState() {
+    super.initState();
+    final SettingsController settingsController = Get.find<SettingsController>();
+    // Initialize controllers with current values
+    settingsController.defaultAngles.forEach((key, value) {
+      _angleControllers[key] = TextEditingController(text: value.toString());
+    });
+  }
+
+  @override
+  void dispose() {
+    // Dispose all controllers
+    _angleControllers.forEach((key, controller) {
+      controller.dispose();
+    });
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -99,6 +126,12 @@ class SettingsScreen extends StatelessWidget {
                         label: const Text('Obnovit tovární hodnoty'),
                         onPressed: () {
                           settingsController.resetToFactoryDefaults();
+                          // Update controllers with reset values
+                          setState(() {
+                            settingsController.defaultAngles.forEach((key, value) {
+                              _angleControllers[key]?.text = value.toString();
+                            });
+                          });
                           Get.snackbar(
                             'Úspěch',
                             'Úhly byly obnoveny na tovární hodnoty',
@@ -198,9 +231,8 @@ class SettingsScreen extends StatelessWidget {
     String servoKey,
     SettingsController controller,
   ) {
-    final textController = TextEditingController(
-      text: controller.defaultAngles[servoKey].toString(),
-    );
+    final textController = _angleControllers[servoKey];
+    if (textController == null) return const SizedBox.shrink();
 
     return Row(
       children: [
@@ -220,40 +252,55 @@ class SettingsScreen extends StatelessWidget {
               FilteringTextInputFormatter.digitsOnly,
               LengthLimitingTextInputFormatter(3),
             ],
-            decoration: InputDecoration(
+            decoration: const InputDecoration(
               hintText: '0-180',
               suffixText: '°',
-              border: const OutlineInputBorder(),
-              contentPadding: const EdgeInsets.symmetric(
+              border: OutlineInputBorder(),
+              contentPadding: EdgeInsets.symmetric(
                 horizontal: 12,
                 vertical: 8,
               ),
-              errorText: null,
             ),
-            onChanged: (value) {
-              if (value.isEmpty) return;
-              final angle = int.tryParse(value);
-              if (angle == null || angle < 0 || angle > 180) {
-                Get.snackbar(
-                  'Chybná hodnota',
-                  'Úhel musí být v rozmezí 0–180°',
-                  snackPosition: SnackPosition.BOTTOM,
-                  backgroundColor: Colors.red.shade100,
-                  duration: const Duration(seconds: 2),
-                );
-                textController.text =
-                    controller.defaultAngles[servoKey].toString();
-                textController.selection = TextSelection.fromPosition(
-                  TextPosition(offset: textController.text.length),
-                );
-              } else {
-                controller.setDefaultAngle(servoKey, angle);
-              }
+            onSubmitted: (value) {
+              _validateAndSaveAngle(value, servoKey, controller, textController);
+            },
+            onEditingComplete: () {
+              _validateAndSaveAngle(
+                  textController.text, servoKey, controller, textController);
             },
           ),
         ),
       ],
     );
+  }
+
+  void _validateAndSaveAngle(
+    String value,
+    String servoKey,
+    SettingsController controller,
+    TextEditingController textController,
+  ) {
+    if (value.isEmpty) {
+      textController.text = controller.defaultAngles[servoKey].toString();
+      return;
+    }
+
+    final angle = int.tryParse(value);
+    if (angle == null || angle < 0 || angle > 180) {
+      Get.snackbar(
+        'Chybná hodnota',
+        'Úhel musí být v rozmezí 0–180°',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red.shade100,
+        duration: const Duration(seconds: 2),
+      );
+      textController.text = controller.defaultAngles[servoKey].toString();
+      textController.selection = TextSelection.fromPosition(
+        TextPosition(offset: textController.text.length),
+      );
+    } else {
+      controller.setDefaultAngle(servoKey, angle);
+    }
   }
 
   Widget _buildWiringRow(String servoName, String channel) {

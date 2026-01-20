@@ -224,32 +224,36 @@ Future<bool> _confirmUnlockIfNeeded() async { ///asynchronní metoda pro zobraze
 
 void resetServos() async {////asynchronní metoda pro resetování všech serv na jejich výchozí pozice. Metoda je označena jako async, což znamená, že může obsahovat asynchronní operace (např. čekání na dokončení úkolů).
   final defaultPositions = settingsController.getDefaultAnglesMap(); ///získání výchozích pozic ze SettingsController
+  
+  // Mapping servo names to pins
+  final servoNameToPin = {
+    _servoBase: 12,
+    _servoShoulder: 10,
+    _servoElbow: 8,
+    _servoWrist: 2,
+    _servoHand: 0,
+  };
 
-  ///Tato funkce projde všechny serva a jejich výchozí pozice z konstantní mapy defaultPositions, resetuje jejich hodnoty v uživatelském rozhraní (UI) a odešle příkazy na nastavení těchto výchozích pozic na serva přes Bluetooth. Po odeslání příkazu na každé servo počká 500 ms před pokračováním na další servo, aby se předešlo zahlcení komunikace.
-  for (final servoName in defaultPositions.keys) { ///projde všechny serva a jejich výchozí pozice z konstantní mapy defaultPositions
+  ///Tato funkce projde všechny serva a jejich výchozí pozice z mapy defaultPositions, resetuje jejich hodnoty v uživatelském rozhraní (UI) a odešle příkazy na nastavení těchto výchozích pozic na serva přes Bluetooth. Po odeslání příkazu na každé servo počká 500 ms před pokračováním na další servo, aby se předešlo zahlcení komunikace.
+  for (final entry in servoNameToPin.entries) {
+    final servoName = entry.key;
+    final pin = entry.value;
+    final defaultAngle = defaultPositions[pin];
+    
+    if (defaultAngle == null) continue;
+    
     // Resetovat hodnotu v UI
-    setState(() { ///aktualizace stavu widgetu
-      final pin = servoPins.entries.firstWhere((e) => 
-        (e.key == _servoBase && servoName == 12) ||
-        (e.key == _servoShoulder && servoName == 10) ||
-        (e.key == _servoElbow && servoName == 8) ||
-        (e.key == _servoWrist && servoName == 2) ||
-        (e.key == _servoHand && servoName == 0),
-        orElse: () => const MapEntry('', -1)
-      ).key;
-      
-      if (pin.isNotEmpty) {
-        servoPositions[pin] = defaultPositions[servoName]!; ///nastavení aktuální pozice serva v mapě servoPositions na jeho výchozí hodnotu z mapy defaultPositions
-      }
+    setState(() {
+      servoPositions[servoName] = defaultAngle;
     });
-    // Odeslat příkaz na servo
-    final int pin = servoName;///získání čísla pinu pro dané servo
+    
     // Mapování rychlosti z UI rozsahu 0-100 na Arduino rozsah 1-255
-    final int mappedSpeed = (servoSpeed * 254 / 100).round() + 1; ///mapování rychlosti serva z uživatelského rozhraní (UI) rozsahu 0-100 na rozsah 1-255 používaný v Arduino. Výpočet se provádí tak, že se rychlost z UI (servoSpeed) vynásobí 254 a vydělí 100, poté se zaokrouhlí na nejbližší celé číslo pomocí metody round() a nakonec se přičte 1, aby se zajistilo, že minimální hodnota je 1 (Arduino nepodporuje rychlost 0).
-    print('[DEBUG] Reset: Posílám výchozí hodnotu pro pin $pin: ${defaultPositions[servoName]} při rychlosti $mappedSpeed'); ///výpis debug informace do konzole, která obsahuje název serva (servoName), číslo pinu (pin), výchozí hodnotu serva (defaultPositions[servoName]) a mapovanou rychlost (mappedSpeed). Tato informace je užitečná pro sledování odesílaných příkazů během vývoje a ladění aplikace.
-    btController.sendServoCommand(pin, defaultPositions[servoName]!, mappedSpeed);///odeslání příkazu na servo pomocí metody sendServoCommand z objektu btController, která bere jako parametry číslo pinu (pin), výchozí hodnotu serva (defaultPositions[servoName]!) a mapovanou rychlost (mappedSpeed).  
+    final int mappedSpeed = (servoSpeed * 254 / 100).round() + 1;
+    print('[DEBUG] Reset: Posílám výchozí hodnotu pro $servoName (pin $pin): $defaultAngle při rychlosti $mappedSpeed');
+    btController.sendServoCommand(pin, defaultAngle, mappedSpeed);
+    
     // Počkej 500ms před dalším servem
-    await Future.delayed(const Duration(milliseconds: 500));///čekání 500 ms před pokračováním na další servo, aby se předešlo zahlcení komunikace. await znamená, že metoda počká na dokončení této asynchronní operace před pokračováním.
+    await Future.delayed(const Duration(milliseconds: 500));
   }
 }
 
