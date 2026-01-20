@@ -16,6 +16,7 @@ dependencies:
   permission_handler: ^11.3.0
   get: ^4.6.5
   file_picker: ^8.1.6
+  get_storage: ^2.1.1
 
 
 dev_dependencies:
@@ -28,6 +29,7 @@ flutter:
   assets:
     - assets/ui.png
     - assets/sequences/
+    - assets/pairing_guide.png
 
 dependency_overrides:
   flutter_bluetooth_serial:
