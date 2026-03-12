@@ -33,8 +33,7 @@ flutter:
     # Defaultní sekvence (složka)
     - assets/sequences/
 
-    # POZN.: pairing_guide.png ti build dřív shodil, protože soubor nebyl nalezen.
-    # Pokud soubor skutečně máš, odkomentuj a ujisti se, že existuje přesně pod touto cestou.
+  
     - assets/pairing_guide.jpg
 
 dependency_overrides:
