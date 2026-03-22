@@ -35,16 +35,16 @@ void setup() {
   pwm.begin(); // pwm.begin(); je typický inicializační příkaz v programování mikrokontrolérů (např. Arduino, Bolder Flight Systems), který spouští hardwarovou generaci PWM signálu (pulzně šířkové modulace) na určených pinech. Inicializuje časovače, nastavuje frekvenci a připravuje kanály pro řízení výkonu, jasu LED nebo servomotorů
   pwm.setPWMFreq(60); // nastaví frekvenci PWM na 60 Hz
 
-  // Initialize all servo states
+  // Nastavení currentAngle = 90 a targetAngle = 90 zajišťuje: po startu není rozdíl mezi current a target ⇒ řídicí smyčka nebude “dohánět” nějakou náhodnou cílovou hodnotu a servo se (logicky) nemá kam hýbat, i je zde zástupce pro kanály servořadiče, 
   for (int i = 0; i < 16; i++) {
-    servoStates[i].currentAngle = 90;
+    servoStates[i].currentAngle = 90; //tohle neznamená, že servo fyzicky opravdu je na 90°. Je to jen výchozí softwareový předpoklad.
     servoStates[i].targetAngle = 90;
     servoStates[i].speed = 255;
     servoStates[i].lastUpdateTime = 0;
   }
 
   // Set initial positions instantly
-  setServoTarget(BASE_CHANNEL, 90, 255);
+  setServoTarget(BASE_CHANNEL, 90, 255); //84° stupňu fyzicky = 90° softwarově
   setServoTarget(SHOULDER_CHANNEL, 0, 255);
   setServoTarget(ELBOW_CHANNEL, 180, 255);
   setServoTarget(WRIST_CHANNEL, 90, 255);
@@ -53,15 +53,16 @@ void setup() {
   Serial.println("Servo initialization complete.");
 }
 
+//Tenhle kus kódu v loop() dělá neblokující čtení příkazů ze sériové linky (Serial) a když přijde celý příkaz (řádek), tak ho vypíše a předá ho dál k parsování/provedení.
 void loop() {
   // Non-blocking: read latest command from serial
-  if (Serial.available() > 0) {
-    String command = Serial.readStringUntil('\n');
-    command.trim();
-    if (command.length() > 0) {
+  if (Serial.available() > 0) { // Serial.available() vrací kolik bajtů už je teď v příjmovém bufferu (přišlo z USB Serial Monitoru nebo z BT modulu typu HC‑05 připojeného na RX/TX). Podmínka > 0 znamená: aspoň něco přišlo, má smysl číst. Tohle je ta „non-blocking“ část: když nic nepřišlo, tak se čtení přeskočí a program může dál dělat jiné věci : ( updateAllServos()).
+    String command = Serial.readStringUntil('\n'); //readStringUntil('\n') čte ze Serialu a skládá to do String, dokud nenarazí na znak nového řádku \n (newline). Typicky tedy očekáváš, že příkaz je jeden řádek ve formátu třeba:"12,84,255\n" (pin/kanál, úhel, rychlost) tohle není 100% neblokující v absolutním smyslu — pokud \n nedorazí, Arduino čeká do vypršení timeoutu Serialu (default bývá 1000 ms). Takže když někdo pošle jen část příkazu bez newline, může to na chvíli zdržet loop.
+    command.trim(); //Odstraní bílé znaky na začátku a konci (mezery, \r, taby…). Hodně důležité kvůli Windows koncům řádků \r\n: po readStringUntil('\n') často zůstane na konci ještě \r, a trim() ho odstraní. Výsledkem je čistý text příkazu bez bordelu kolem.
+    if (command.length() > 0) { // Když by přišel prázdný řádek (jen newline), tak command bude prázdný. Tohle to filtruje, aby se nezpracovávaly prázdné příkazy.
       Serial.print("Received command: ");
       Serial.println(command);
-      processCommand(command);
+      processCommand(command); //předá text dále funkci processCommand na line 146
     }
   }
 
