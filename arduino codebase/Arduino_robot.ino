@@ -3,14 +3,14 @@
 
 Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 
-// Servo kanály dle tvého zapojení
+// Servo kanály dle zapojení
 #define BASE_CHANNEL     12
 #define SHOULDER_CHANNEL 10
 #define ELBOW_CHANNEL     8
 #define WRIST_CHANNEL     2
 #define HAND_CHANNEL      0
 
-// Výchozí rozsahy
+// Výchozí rozsahy, const int v jazycích C/C++ deklaruje celočíselnou proměnnou jako konstantní, což znamená, že její hodnotu nelze po inicializaci změnit
 const int SERVOMIN = 150;
 const int SERVOMAX = 600;
 const int SHOULDER_MIN = 100;
@@ -18,21 +18,22 @@ const int SHOULDER_MAX = 700;
 const int ELBOW_MIN = 100;
 const int ELBOW_MAX = 700;
 
-// Structure to hold servo state
+// struct
+//(struktura) je v programování uživatelem definovaný datový typ, který umožňuje seskupit různé proměnné (členy) pod jeden název. Na rozdíl od pole, struct může obsahovat různé datové typy (int, char, float) v souvislém bloku paměti. 
 struct ServoState {
   int currentAngle;
   int targetAngle;
   int speed;  // 1-255: 1=slowest, 255=instant
-  unsigned long lastUpdateTime;
+  unsigned long lastUpdateTime; //unsigned long je datový typ v programovacích jazycích C/C++ (a také v Arduinu), který slouží k ukládání velkých nezáporných celých čísel
 };
 
-// Array to hold state for all servo channels
+// Pole které přiřadí proměnnou ServoState (která má v sobě více hodnot) pro všechny kanály servořadiče 0-16)
 ServoState servoStates[16];
 
 void setup() {
-  Serial.begin(9600);
-  pwm.begin();
-  pwm.setPWMFreq(60);
+  Serial.begin(9600); //Serial.begin(9600); v Arduino IDE inicializuje sériovou komunikaci mezi deskou Arduino a počítačem (nebo jiným zařízením - HC - 05) rychlostí 9600 bitů za sekundu
+  pwm.begin(); // pwm.begin(); je typický inicializační příkaz v programování mikrokontrolérů (např. Arduino, Bolder Flight Systems), který spouští hardwarovou generaci PWM signálu (pulzně šířkové modulace) na určených pinech. Inicializuje časovače, nastavuje frekvenci a připravuje kanály pro řízení výkonu, jasu LED nebo servomotorů
+  pwm.setPWMFreq(60); // nastaví frekvenci PWM na 60 Hz
 
   // Initialize all servo states
   for (int i = 0; i < 16; i++) {
