@@ -3,6 +3,21 @@
 
 Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 
+   // Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
+//Adafruit_PWMServoDriver je přímo třída z Adafruit knihovny pro PCA9685.
+//Samotná proměnná pwm není “z knihovny” (to je jen  jméno), ale všechno, co se volá jako pwm.<něco>(), už je metoda z té knihovny.
+
+//pwm.begin();
+//Inicializace PCA9685 čipu (I2C komunikace, registry…).
+//pwm.setPWMFreq(60);
+//Nastavení frekvence PWM pro všechny kanály (u serv se běžně používá cca 50–60 Hz).
+//pwm.setPWM(servoChannel, 0, pulseLen);
+//Nastaví konkrétní kanál PCA9685:
+  //  první parametr: číslo kanálu 0–15
+   // druhý: “on tick” (kdy se PWM zapne v rámci periody) – často se nechává 0
+   // třetí: “off tick” (kdy se PWM vypne) – to je ta délka pulzu v jednotkách ticků PCA9685 (0–4095)
+
+
 // Servo kanály dle zapojení
 #define BASE_CHANNEL     12
 #define SHOULDER_CHANNEL 10
@@ -188,6 +203,10 @@ void processCommand(String cmd) {
   int angle = cmd.substring(firstComma + 1, secondComma).toInt();
   int speed = cmd.substring(secondComma + 1).toInt();
 
-  // Use non-blocking target setting
+  // Tady se to předá dál.
+//setServoTarget():
+ //   ořízne angle do 0–180 a speed do 1–255,
+   // uloží to do servoStates[servoChannel],
+   // a pokud speed==255, tak zavolá hned writePwm(...).
   setServoTarget(servoChannel, angle, speed);
 }
