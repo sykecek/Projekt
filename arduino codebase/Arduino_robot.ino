@@ -62,7 +62,7 @@ void loop() {
     if (command.length() > 0) { // Když by přišel prázdný řádek (jen newline), tak command bude prázdný. Tohle to filtruje, aby se nezpracovávaly prázdné příkazy.
       Serial.print("Received command: ");
       Serial.println(command);
-      processCommand(command); //předá text dále funkci processCommand na line 146
+      processCommand(command); //předá text dále funkci processCommand
     }
   }
 
@@ -70,16 +70,24 @@ void loop() {
   updateAllServos();
 }
 
-// Set target angle and speed for a servo (non-blocking)
-void setServoTarget(uint8_t servoChannel, int targetAngle, int speed) {
-  targetAngle = constrain(targetAngle, 0, 180);
+// Tahle funkce setServoTarget(...) nastaví pro vybraný servo kanál cílový úhel a rychlost pohybu do struktury servoStates[] a v případě “instantní” rychlosti (255) servo hned fyzicky přepne na nový úhel (zapíše PWM). 
+// Jinak se servo nepohne hned, ale až postupně v logice typu updateAllServos()
+void setServoTarget(uint8_t servoChannel, int targetAngle, int speed) { //servoChannel je číslo kanálu (0–15) na servo driveru (typicky PCA9685).targetAngle je požadovaný úhel v “logických stupních” 0–180 (ne přímo PWM).speed je “rychlost” v rozsahu 1–255, kde:malé číslo = pomalu (bude dělat kroky),255 = okamžitě.
+  targetAngle = constrain(targetAngle, 0, 180); // Constraints (omezení) v C++20 jsou podmínky kladené na šablony (template arguments), které definují, jaké typy nebo hodnoty lze použít
   speed = constrain(speed, 1, 255);
-  
-  ServoState &state = servoStates[servoChannel];
+  // constrain(x, min, max) zajistí, že:
+   // když přijde targetAngle = -20, nastaví se na 0
+   // když přijde targetAngle = 250, nastaví se na 180
+   // když přijde speed = 0, nastaví se na 1
+   // když přijde speed = 999, nastaví se na 255
+  ServoState &state = servoStates[servoChannel]; //ServoState &state = ... znamená reference (alias) na prvek pole servoStates[servoChannel]. takže state.targetAngle = ... ve skutečnosti zapisuje přímo do servoStates[servoChannel].targetAngle.
   state.targetAngle = targetAngle;
   state.speed = speed;
-  
-  // If speed is 255 (instant), move immediately
+  //  Pokud je rychlost 255 (nebo víc, ale to už constrain srovná), bere se to jako instant move.
+    // state.currentAngle = targetAngle;
+       //  tím si firmware řekne: “servo už je na cíli” (nebude ho pak updateAllServos() dál krokovat).
+   // writePwm(servoChannel, targetAngle);
+     //   to je ten moment, kdy se to projeví fyzicky: funkce typicky převede úhel (0–180) na PWM pulz (např. 150–600) a pošle ho na driver.
   if (speed >= 255) {
     state.currentAngle = targetAngle;
     writePwm(servoChannel, targetAngle);
