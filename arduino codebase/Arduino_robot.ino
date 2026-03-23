@@ -117,15 +117,15 @@ void updateAllServos() {
     //speed = 1 → delayMs ≈ 20 ms (pomalé)
      // speed = 254→ delayMs ≈ 1 ms (hodně rychlé)
       // čím vyšší speed, tím menší pauza mezi 1° kroky.
-    // Check if enough time has passed
+    // state.lastUpdateTime je čas, kdy servo udělalo poslední krok. currentTime - lastUpdateTime je “kolik ms uběhlo”. Pokud uběhlo aspoň delayMs, servo smí udělat další krok.
     if (currentTime - state.lastUpdateTime >= (unsigned long)delayMs) {
-      // Move one step toward target
+      // vždycky se posune jen o 1 stupeň směrem k cíli. žádné skoky o víc stupňů, proto je pohyb plynulejší.
       if (state.currentAngle < state.targetAngle) {
         state.currentAngle++;
       } else {
         state.currentAngle--;
       }
-      
+      // writePwm(i, state.currentAngle) fyzicky nastaví PWM pro kanál i podle aktuálního úhlu po kroku. Pak se uloží lastUpdateTime, aby se další krok dělal až po delayMs
       writePwm(i, state.currentAngle);
       state.lastUpdateTime = currentTime;
     }
@@ -134,6 +134,7 @@ void updateAllServos() {
 
 // Nastaví servo plynule na daný úhel podle rychlosti
 // speed: 1 = pomalu, 255 = okamžitě
+// Tahle funkce je jen obal kvůli zpětné kompatibilitě.
 void setServoAngle(uint8_t servoChannel, int targetAngle, int speed) {
   // Deprecated: Use setServoTarget for non-blocking operation
   // Kept for backward compatibility but converts to non-blocking
@@ -141,6 +142,15 @@ void setServoAngle(uint8_t servoChannel, int targetAngle, int speed) {
 }
 
 // Použije správné mapování rozsahu podle serva
+//Převede úhel angle (0–180) na PWM “pulse length” (hodnota, kterou chce knihovna pro PCA9685).
+// map(angle, 0, 180, MIN, MAX) znamená:
+     //   0° → MIN
+       // 180° → MAX
+        // 90° → přibližně (MIN+MAX)/2
+//  Používá různé min/max podle serva:
+   //  pro SHOULDER: SHOULDER_MIN..SHOULDER_MAX
+    // pro ELBOW: ELBOW_MIN..ELBOW_MAX
+    // pro ostatní (BASE, WRIST, HAND): SERVOMIN..SERVOMAX
 void writePwm(uint8_t servoChannel, int angle) {
   int pulseLen;
   if (servoChannel == SHOULDER_CHANNEL) {
@@ -150,19 +160,30 @@ void writePwm(uint8_t servoChannel, int angle) {
   } else {
     pulseLen = map(angle, 0, 180, SERVOMIN, SERVOMAX);
   }
-  pwm.setPWM(servoChannel, 0, pulseLen);
+  pwm.setPWM(servoChannel, 0, pulseLen); // skutečně nastaví PWM výstup na PCA9685 na daném kanálu
 }
 
 // Očekává "servoChannel,angle,speed"
+// processCommand(String cmd) je parser jednoho příkazu ve formátu CSV: <servoChannel>,<angle>,<speed>, a pak to předá do setServoTarget(), která nastaví cílový úhel a rychlost (plynule nebo okamžitě).
 void processCommand(String cmd) {
   int firstComma = cmd.indexOf(',');
   int secondComma = cmd.indexOf(',', firstComma + 1);
-
+  // indexOf(',') vrátí index první čárky, nebo -1, když tam není.
+  //  Druhý indexOf(',', firstComma + 1) hledá další čárku až za první čárkou, tedy najde druhou.
+  //Příklad pro cmd = "12,84,255":
+   // firstComma bude 2 (znaky: 1(0) 2(1) ,(2) ...)
+    //secondComma bude 5
+  
+  //Pokud chybí první nebo druhá čárka, příkaz není ve tvaru a,b,c. Vypíše chybu a ukončí funkci (return;), nic se nepohne.
   if (firstComma == -1 || secondComma == -1) {
     Serial.println("Invalid command format.");
     return;
   }
 
+  //Rozřeže string na 3 části a převede na int
+  //servoChannel: od začátku do první čárky (neobsahuje čárku)
+  //angle: mezi první a druhou čárkou
+  //speed: od druhé čárky až do konce
   int servoChannel = cmd.substring(0, firstComma).toInt();
   int angle = cmd.substring(firstComma + 1, secondComma).toInt();
   int speed = cmd.substring(secondComma + 1).toInt();
