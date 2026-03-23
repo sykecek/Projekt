@@ -94,26 +94,29 @@ void setServoTarget(uint8_t servoChannel, int targetAngle, int speed) { //servoC
   }
 }
 
-// Update all servos incrementally (non-blocking, called every loop)
+// Tahle funkce updateAllServos() je “motor” plynulého pohybu: každé servo (0–15) posouvá po 1 stupni směrem k cíli a rychlost nastavuje tím, jak často ten 1° krok udělá.
+// Je to udělané tak, aby to bylo non‑blocking (nezastaví celý program delay()), ale používá čas z millis().
 void updateAllServos() {
   unsigned long currentTime = millis();
-  
-  for (int i = 0; i < 16; i++) {
-    ServoState &state = servoStates[i];
-    
-    // Skip if already at target
+  //millis() vrací počet milisekund od startu Arduina.
+  //Ukládá se to do currentTime, aby se to v cyklu nevolalo pořád dokola.
+  for (int i = 0; i < 16; i++) { //projede všech 16 kanálů
+    ServoState &state = servoStates[i]; // state je reference na servoStates[i] (takže změny jdou přímo do pole).
+    // continue přeskočí zbytek a jde na další servo, Jestli currentAngle = targetAngle, servo už tam “logicky” je, netřeba nic dělat.
     if (state.currentAngle == state.targetAngle) {
       continue;
     }
-    
-    // Skip if speed is instant (already handled in setServoTarget)
+    //“Instant” pohyb se řeší jinde (setServoTarget() rovnou zavolá writePwm()).
+    //Tady už se to nemá krokovat.
     if (state.speed >= 255) {
       continue;
     }
-    
-    // Calculate delay based on speed (1-254 maps to 20ms-1ms)
+    // Arduino map(x, inMin, inMax, outMin, outMax) lineárně převede hodnotu.
+    //Tady se speed (1..254) převádí na delayMs (20..1).
     int delayMs = map(state.speed, 1, 254, 20, 1);
-    
+    //speed = 1 → delayMs ≈ 20 ms (pomalé)
+     // speed = 254→ delayMs ≈ 1 ms (hodně rychlé)
+      // čím vyšší speed, tím menší pauza mezi 1° kroky.
     // Check if enough time has passed
     if (currentTime - state.lastUpdateTime >= (unsigned long)delayMs) {
       // Move one step toward target
