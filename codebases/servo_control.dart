@@ -1,6 +1,8 @@
 import 'dart:async'; ///import pro práci s asynchronními operacemi a časovači., asynchronní operace umožňují provádět úkoly na pozadí bez blokování hlavního vlákna aplikace., časovače umožňují plánovat opakované nebo zpožděné úkoly.
+import 'dart:io'; ///import pro práci se soubory a souborovým systémem (potřebné pro ukládání záznamů)
 import 'package:flutter/material.dart';///import pro Flutter materiální design komponenty a widgety., materiální design je vizuální jazyk vyvinutý Googlem pro vytváření konzistentních a esteticky příjemných uživatelských rozhraní.
 import 'package:get/get.dart';///import pro GetX knihovnu, která poskytuje state management, routování, snackbar, dependency injection a další užitečné funkce pro Flutter aplikace.
+import 'package:path_provider/path_provider.dart'; ///import pro získání cest k souborovému systému zařízení (dokumenty, dočasné soubory atd.)
 import 'bluetooth_ovladac.dart'; ///import pro vlastní třídu BluetoothController z lokálního souboru bluetooth_ovladac.dart., tato třída pravděpodobně obsahuje logiku pro správu Bluetooth připojení a komunikaci s Bluetooth zařízeními.
 import '../settings_controller.dart'; ///import pro SettingsController
 /// widget = základní stavební blok uživatelského rozhraní ve Flutteru. Widgety mohou být buď statické (StatelessWidget) nebo stavové (StatefulWidget).
@@ -175,6 +177,12 @@ class _ServoControlScreenState extends State<ServoControlScreen> { ///definice t
 
 bool _unlockWarningAccepted = false; ///proměnná pro sledování, zda uživatel přijal varování o odemknutí plného rozsahu serva. Výchozí hodnota je false, což znamená, že varování ještě nebylo přijato. Tato proměnná se využívá ve funkci _confirmUnlockIfNeeded pro zobrazení dialogu s varováním pouze jednou.
 
+  // ── Záznam pohybů ──────────────────────────────────────────────────────────
+  bool _isRecording = false; ///příznak, zda právě probíhá nahrávání pohybů serv
+  bool _useRealDelay = false; ///příznak, zda se má zaznamenávat skutečný čas mezi kroky (true) nebo pevný delay 300 ms (false)
+  final List<String> _recordedLines = []; ///seznam zaznamenaných řádků ve formátu pin,angle,speed,delayMs
+  DateTime? _lastRecordTime; ///čas posledního zaznamenaného kroku (pro výpočet skutečného delay)
+
 //<-- Servo unlock warning sekce -->// <--------------------------------------------------------------------
 
 Future<bool> _confirmUnlockIfNeeded() async { ///asynchronní metoda pro zobrazení dialogu s varováním o odemknutí plného rozsahu serva, pokud uživatel ještě nepřijal toto varování. Metoda vrací Future<bool>, což znamená, že výsledek bude dostupný v budoucnu (po dokončení asynchronní operace) a bude typu boolean (true = varování přijato, false = varování odmítnuto).
@@ -343,6 +351,57 @@ Widget build(BuildContext context) {/// metoda build, která bere jako parametr 
                     onPressed: () => Get.toNamed('/sequence'), ///akce při stisknutí tlačítka, navigace na obrazovku s názvem '/sequence' pomocí GetX metody toNamed
                   ),
                   const SizedBox(height: 12), ///vytvoření vertikální mezery o výšce 12 pixelů
+
+                  // ── Tlačítko záznamu + checkbox "Skutečný delay" ─────────────
+                  Row( ///řádek pro tlačítko záznamu a checkbox
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon( ///tlačítko záznamu, které přepíná mezi "Záznam" a "Stop"
+                          icon: Icon(_isRecording ? Icons.stop : Icons.fiber_manual_record), ///ikona stop nebo record podle stavu záznamu
+                          label: Text(
+                            _isRecording ? 'Stop' : 'Záznam', ///text tlačítka se mění podle stavu záznamu
+                            style: const TextStyle(fontSize: 16),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            backgroundColor: _isRecording ? Colors.red : Colors.teal, ///červená při záznamu, teal při nečinnosti
+                            foregroundColor: Colors.white,
+                          ),
+                          onPressed: btController.isSequenceRunning.value
+                              ? null ///zakázáno při spuštěné sekvenci
+                              : () {
+                                  if (_isRecording) {
+                                    _stopRecording(); ///ukončení záznamu a uložení souboru
+                                  } else {
+                                    setState(() {
+                                      _isRecording = true;
+                                      _recordedLines.clear();
+                                      _lastRecordTime = null;
+                                    });
+                                  }
+                                },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Column( ///sloupec se zaškrtávacím políčkem a popiskem
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Checkbox( ///zaškrtávací políčko pro výběr způsobu záznamu delay
+                            value: _useRealDelay,
+                            onChanged: _isRecording
+                                ? null ///nelze měnit za běhu záznamu
+                                : (bool? val) {
+                                    setState(() {
+                                      _useRealDelay = val ?? false;
+                                    });
+                                  },
+                          ),
+                          const Text('Skutečný\ndelay', textAlign: TextAlign.center, style: TextStyle(fontSize: 11)), ///popisek zaškrtávacího políčka
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12), ///vytvoření vertikální mezery o výšce 12 pixelů
                 ],
               ),
             ),
@@ -367,9 +426,18 @@ Widget build(BuildContext context) {/// metoda build, která bere jako parametr 
         Row( ///Row = widget pro uspořádání svých potomků horizontálně (vedle sebe)
           children: [ ///seznam potomků Row
             Expanded( ///Expanded = widget, který rozšiřuje svého potomka tak, aby zabral veškerý dostupný prostor v hlavní ose (horizontálně v tomto případě)
-              child: Text( ///Text widget pro zobrazení názvu serva a jeho aktuální hodnoty
-                '$servoName: $currentValue°', ///zobrazení textu s názvem serva (servoName) a jeho aktuální hodnotou (currentValue) ve formátu "Název serva: Hodnota°"
-                style: const TextStyle(fontSize: 14), ///styl textu s velikostí písma 14
+              child: GestureDetector( ///GestureDetector zachytí klepnutí a otevře dialog pro ruční zadání úhlu
+                onTap: btController.isSequenceRunning.value
+                    ? null
+                    : () => _showAngleInputDialog(servoName), ///otevření dialogu pro ruční zadání úhlu po klepnutí na popisek
+                child: Text( ///Text widget pro zobrazení názvu serva a jeho aktuální hodnoty
+                  '$servoName: $currentValue°', ///zobrazení textu s názvem serva (servoName) a jeho aktuální hodnotou (currentValue) ve formátu "Název serva: Hodnota°"
+                  style: const TextStyle(
+                    fontSize: 14,
+                    decoration: TextDecoration.underline, ///podtržení signalizuje, že jde o klikatelný prvek
+                    decorationStyle: TextDecorationStyle.dotted,
+                  ),
+                ),
               ),
             ),
             // Lock/Unlock button
@@ -545,6 +613,11 @@ void _openRobotAxesImageViewer() { /// metoda pro otevření dialogu s interakti
                 _sendServoCommand(servoName, servoPositions[servoName]!); ///odeslání příkazu na servo s aktuální hodnotou z mapy servoPositions pomocí metody _sendServoCommand
               });
             },
+            onChangeEnd: btController.isSequenceRunning.value ? null : (double endAngle) { ///akce po dokončení tažení posuvníku (uživatel zvedl prst) – slouží pro záznam pohybu
+              if (_isRecording) { ///pokud probíhá nahrávání, zaznamená aktuální polohu serva
+                _recordStep(servoName, servoPositions[servoName]!); ///uložení kroku záznamu s aktuální hodnotou serva
+              }
+            },
           ),
           // Visuální indikátory bezpečnostních limitů, pokud je servo zamčené
           if (isLocked) _buildSafetyIndicators(minLimit, maxLimit), ///pokud je servo zamčené (isLocked je true), zobrazí se vizuální indikátory bezpečnostních limitů pomocí metody _buildSafetyIndicators, která bere jako parametry minimální limit (minLimit) a maximální limit (maxLimit)
@@ -580,6 +653,184 @@ void _openRobotAxesImageViewer() { /// metoda pro otevření dialogu s interakti
     final int mappedSpeed = (servoSpeed * 254 / 100).round() + 1; ///převedení rychlosti serva z rozsahu 0-100 na rozsah 1-255 pomocí lineární transformace a zaokrouhlení na nejbližší celé číslo
     print('[DEBUG] Posílám hodnotu pro $servoName (pin $pin): $angle při rychlosti $mappedSpeed'); ///výpis debug informace do konzole s názvem serva, pinem, úhlem a rychlostí
     btController.sendServoCommand(pin, angle, mappedSpeed); ///odeslání příkazu servu pomocí metody sendServoCommand z objektu btController s parametry pin, angle a mappedSpeed
+  }
+
+  // ── Ruční zadání úhlu dialogem ─────────────────────────────────────────────
+
+  /// Otevře dialog pro ruční zadání přesného úhlu daného serva.
+  /// Po potvrzení se aplikují veškerá existující omezení (zámek + dynamické vazby)
+  /// stejnou cestou jako při normálním pohybu sliderem.
+  Future<void> _showAngleInputDialog(String servoName) async {
+    final currentAngle = servoPositions[servoName]!; ///aktuální úhel serva jako výchozí hodnota v textovém poli
+    final textController = TextEditingController(text: currentAngle.toString()); ///controller pro textové pole s výchozí hodnotou
+
+    final int? result = await showDialog<int>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: Text('Zadejte úhel – $servoName'), ///titulek dialogu s názvem serva
+          content: TextField(
+            controller: textController,
+            keyboardType: TextInputType.number, ///numerická klávesnice
+            autofocus: true, ///automatické zaměření na textové pole po otevření dialogu
+            decoration: const InputDecoration(
+              labelText: 'Úhel (0–180°)',
+              suffixText: '°',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(null), ///zavření dialogu bez změny
+              child: const Text('Zrušit'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final parsed = int.tryParse(textController.text.trim()); ///pokus o převod zadaného textu na celé číslo
+                if (parsed == null) { ///pokud převod selže, zobrazí se chybová zpráva
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(content: Text('Zadejte platné celé číslo')),
+                  );
+                  return;
+                }
+                Navigator.of(ctx).pop(parsed); ///potvrzení a zavření dialogu s hodnotou
+              },
+              child: const Text('Potvrdit'),
+            ),
+          ],
+        );
+      },
+    );
+
+    textController.dispose();
+    if (result == null) return; ///uživatel zrušil dialog, nic neděláme
+
+    _applyAngleWithConstraints(servoName, result); ///aplikace úhlu se všemi omezeními
+
+    if (_isRecording) { ///pokud probíhá nahrávání, zaznamenáme krok
+      _recordStep(servoName, servoPositions[servoName]!);
+    }
+  }
+
+  /// Aplikuje nový úhel na servo se všemi omezeními (hard limit 0..180,
+  /// lock-aware clamp přes _clampServoValue, a kaskádová omezení ELBOW → SHOULDER/WRIST).
+  /// Příkazy se odesílají ihned (bez debounce), stejně jako při ostatních přímých akcích.
+  void _applyAngleWithConstraints(String servoName, int rawAngle) {
+    final hardClamped = rawAngle.clamp(0, 180); ///hard limit 0–180 pro ochranu HW, vždy se aplikuje
+    final clamped = _clampServoValue(servoName, hardClamped); ///aplikace lock-aware omezení (zámek + dynamické limity)
+
+    setState(() {
+      servoPositions[servoName] = clamped; ///aktualizace pozice serva v UI
+
+      /// Kaskáda: pokud měníme ELBOW, automaticky omezit SHOULDER (pokud je zamčen)
+      if (servoName == _servoElbow && servoLocked[_servoShoulder]!) {
+        final shoulderMax = _getShoulderMaxAngle();
+        if (servoPositions[_servoShoulder]! > shoulderMax) {
+          servoPositions[_servoShoulder] = shoulderMax;
+        }
+      }
+
+      /// Kaskáda: pokud měníme ELBOW, automaticky omezit WRIST (pokud je zamčen)
+      if (servoName == _servoElbow && servoLocked[_servoWrist]!) {
+        final wristMin = _getMinLimit(_servoWrist);
+        final wristMax = _getMaxLimit(_servoWrist);
+        servoPositions[_servoWrist] = servoPositions[_servoWrist]!.clamp(wristMin, wristMax);
+      }
+    });
+
+    /// Odeslání příkazů ihned (bez debounce, protože jde o explicitní akci uživatele)
+    _sendServoCommand(servoName, clamped);
+
+    /// Pokud byly kaskádovány SHOULDER nebo WRIST, odeslat i jejich příkazy
+    if (servoName == _servoElbow) {
+      _sendServoCommand(_servoShoulder, servoPositions[_servoShoulder]!);
+      _sendServoCommand(_servoWrist, servoPositions[_servoWrist]!);
+    }
+  }
+
+  // ── Záznam pohybů – metody ─────────────────────────────────────────────────
+
+  /// Zaznamenání jednoho kroku do seznamu _recordedLines.
+  /// Formát: pin,angle,speed,delayMs (shodný s formátem existujících sekvencí).
+  void _recordStep(String servoName, int angle) {
+    final int pin = servoPins[servoName]!; ///pin odpovídající danému servu
+    final int mappedSpeed = (servoSpeed * 254 / 100).round() + 1; ///aktuální rychlost přemapovaná na rozsah 1–255
+
+    /// Výpočet delay podle režimu záznamu
+    final int delay;
+    if (_useRealDelay) { ///pokud je zaškrtnuto "Skutečný delay", měříme reálný čas od posledního kroku
+      final now = DateTime.now();
+      delay = _lastRecordTime == null
+          ? 300 ///první krok dostane výchozí delay 300 ms
+          : now.difference(_lastRecordTime!).inMilliseconds.clamp(50, 30000); ///skutečný čas s limity 50–30000 ms
+      _lastRecordTime = now;
+    } else {
+      delay = 300; ///fixní delay 300 ms (výchozí)
+    }
+
+    _recordedLines.add('$pin,$angle,$mappedSpeed,$delay'); ///přidání kroku do seznamu zaznamenaných řádků
+  }
+
+  /// Ukončení záznamu, uložení souboru a upozornění uživatele.
+  void _stopRecording() {
+    setState(() {
+      _isRecording = false;
+    });
+    _saveRecording(); ///uložení zaznamenaných kroků do souboru
+  }
+
+  /// Uložení zaznamenaných kroků do souboru zaznam1.txt … zaznam99.txt
+  /// v adresáři dokumentů aplikace.
+  Future<void> _saveRecording() async {
+    if (_recordedLines.isEmpty) { ///pokud nejsou žádné kroky, není co ukládat
+      Get.snackbar('Záznam', 'Nebyl zaznamenán žádný pohyb.', snackPosition: SnackPosition.BOTTOM);
+      return;
+    }
+
+    try {
+      final dir = await getApplicationDocumentsDirectory(); ///získání adresáře dokumentů aplikace
+
+      /// Hledání prvního volného názvu souboru zaznam1.txt … zaznam99.txt
+      String? filePath;
+      String? fileName;
+      for (int i = 1; i <= 99; i++) {
+        final candidate = '${dir.path}/zaznam$i.txt';
+        if (!File(candidate).existsSync()) { ///pokud soubor neexistuje, použijeme toto číslo
+          filePath = candidate;
+          fileName = 'zaznam$i.txt';
+          break;
+        }
+      }
+
+      if (filePath == null) { ///pokud jsou obsazena všechna místa zaznam1–99
+        Get.snackbar(
+          'Chyba',
+          'Nelze uložit: všechna místa záznamu (zaznam1–99) jsou obsazena.',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.red.shade100,
+        );
+        return;
+      }
+
+      final content = _recordedLines.join('\n'); ///spojení řádků záznamu do jednoho řetězce
+      await File(filePath).writeAsString(content); ///zápis obsahu do souboru
+
+      Get.snackbar(
+        'Záznam uložen',
+        'Soubor: $fileName (${_recordedLines.length} kroků)',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.green.shade100,
+        duration: const Duration(seconds: 3),
+      );
+
+      _recordedLines.clear(); ///vyčištění záznamu po uložení
+    } catch (e) {
+      Get.snackbar(
+        'Chyba při ukládání',
+        e.toString(),
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red.shade100,
+      );
+    }
   }
 }
 

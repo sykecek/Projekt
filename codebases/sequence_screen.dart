@@ -1,8 +1,10 @@
 import 'dart:async';///import pro práci s asynchronními operacemi a časovači., asynchronní operace umožňují provádět úkoly na pozadí bez blokování hlavního vlákna aplikace., časovače umožňují plánovat opakované nebo zpožděné úkoly. asynchronně = možnost běhu funkce v budoucnu. Příklad v této aplikaci: načítání sekvence ze souboru (FilePicker/čtení bytes) nebo odesílání příkazů přes Bluetooth a čekání na odpověď zařízení.
+import 'dart:io'; ///import pro práci se soubory a souborovým systémem (potřebné pro načítání a ukládání záznamů)
 import 'package:flutter/material.dart';///import pro práci s Flutter frameworkem a jeho widgety.
 import 'package:flutter/services.dart';///knihovna pro přístup k assetům a platformovým službám ve Flutteru., umožňuje načítat soubory z assets, komunikovat s nativním kódem atd.
 import 'package:get/get.dart';///import pro práci s GetX knihovnou ve Flutteru., GetX je populární knihovna pro správu stavu, navigaci a závislostí ve Flutter aplikacích.
 import 'package:file_picker/file_picker.dart';///import pro práci s výběrem souborů ve Flutteru., umožňuje uživatelům vybírat soubory z jejich zařízení pomocí nativního dialogu pro výběr souborů.
+import 'package:path_provider/path_provider.dart'; ///import pro získání cest k souborovému systému zařízení
 import 'bluetooth_ovladac,servo_control/bluetooth_ovladac.dart';///import pro práci s Bluetooth ovladačem a servo kontrolérem., tento soubor pravděpodobně obsahuje třídu BluetoothController, která spravuje připojení a komunikaci s Bluetooth zařízením.
 import 'settings_controller.dart'; ///import pro SettingsController
 import 'utils/file_bytes_reader.dart';
@@ -46,7 +48,8 @@ class _SequenceScreenState extends State<SequenceScreen> {///třída _SequenceSc
 
   // Zdroj sekvence
   String selectedSource = 'Default 1'; ///výchozí vybraný zdroj sekvence je 'Default 1'.
-  final List<String> sources = ['Default 1', 'Default 2', 'Default 3', 'Vlastní soubor…']; ///seznam dostupných zdrojů sekvencí, včetně tří výchozích a možnosti pro vlastní soubor.
+  List<String> sources = ['Default 1', 'Default 2', 'Default 3', 'Vlastní soubor…']; ///seznam dostupných zdrojů sekvencí, včetně tří výchozích a možnosti pro vlastní soubor. Není final, protože seznam se dynamicky rozrůstá o záznamy (zaznam*.txt).
+  Map<String, String> _zaznamPaths = {}; ///mapa název_záznamu → cesta k souboru pro záznamy uložené na zařízení (zaznam1.txt … zaznam99.txt)
   
   // Vlastní soubor
   String? customFilePath; ///cesta k vlastnímu souboru se sekvencí, pokud je vybrán. string? znamená, že proměnná může být typu String nebo null. ? označuje, že proměnná je nullable, tedy může obsahovat hodnotu null.
@@ -65,6 +68,12 @@ class _SequenceScreenState extends State<SequenceScreen> {///třída _SequenceSc
   int currentStepIndex = 0; ///index aktuálního kroku v sekvenci, který je právě prováděn., index potřebujeme k tomu, abychom věděli, který krok sekvence máme právě vykonat. Při spuštění sekvence je tento index nastaven na 0 (první krok). Jakmile je krok dokončen, index se zvýší o 1, aby ukazoval na další krok. Tento proces pokračuje, dokud nejsou všechny kroky provedeny. Pokud je povoleno opakování (loopEnabled), index se po dokončení sekvence resetuje zpět na 0 a sekvence začíná znovu. Index = pozice v seznamu kroků sekvence.
 
   ///následující metoda je volána při zničení widgetu (např. při opuštění obrazovky). Zajišťuje, že pokud je sekvence právě spuštěna, bude zastavena a všechny související zdroje budou uvolněny.
+  @override ///označuje, že následující metoda přepisuje metodu z nadřazené třídy.
+  void initState() {
+    super.initState();
+    _loadZaznamFiles(); ///načtení dostupných zaznam*.txt souborů při otevření obrazovky
+  }
+
   @override ///označuje, že následující metoda přepisuje metodu z nadřazené třídy.
   void dispose() { ///metoda dispose je volána při zničení widgetu (např. při opuštění obrazovky). Slouží k uvolnění zdrojů a zastavení procesů spojených s tímto widgetem.
     _stopExecution();///zastavení provádění sekvence, pokud je spuštěna.
@@ -125,27 +134,40 @@ class _SequenceScreenState extends State<SequenceScreen> {///třída _SequenceSc
             // Následující sekce pro výběr zdroje sekvence, vlastní soubor, spuštění/zastavení sekvence a zobrazení stavu a kroků sekvence.
             const Text('Zdroj sekvence:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)), ///popisek pro výběr zdroje sekvence.
             const SizedBox(height: 8), ///odsazení mezi popiskem a dropdownem.
-            DropdownButton<String>(///DropdownButton je widget pro výběr jedné hodnoty z rozbalovacího seznamu.
-              value: selectedSource,///aktuálně vybraný zdroj sekvence.
-              isExpanded: true,///rozbalovací seznam zabírá celou dostupnou šířku.
-              items: sources.map((String source) {///vytvoření položek dropdownu z dostupných zdrojů sekvence.
-                return DropdownMenuItem<String>(///vytvoření jednotlivé položky v dropdownu.
-                  value: source, ///hodnota položky je název zdroje.
-                  child: Text(source), ///zobrazený text položky je název zdroje.
-                );
-              }).toList(), ///převedení mapovaných položek na seznam.
-              onChanged: isRunning ? null : (String? newValue) { ///akce při změně výběru zdroje sekvence. Pokud je sekvence spuštěna (isRunning), dropdown je deaktivován (null). Jinak se aktualizuje selectedSource a resetují se související stavy.
-                setState(() { ///volání setState pro aktualizaci stavu widgetu.
-                  selectedSource = newValue!; ///nastavení nového vybraného zdroje sekvence.
-                  errorMessage = null; ///resetování chybové zprávy.
-                  statusMessage = ''; ///resetování stavové zprávy.
-                  sequenceSteps.clear(); ///vymazání kroků sekvence.
-                  if (selectedSource != 'Vlastní soubor…') { ///pokud není vybrán vlastní soubor, resetují se související proměnné.
-                    customFilePath = null; ///resetování cesty k vlastnímu souboru.
-                    customFileName = null; ///resetování názvu vlastního souboru.
-                  }
-                });
-              },
+            Row( ///řádek kombinující dropdown pro výběr zdroje a tlačítko EDIT
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: DropdownButton<String>(///DropdownButton je widget pro výběr jedné hodnoty z rozbalovacího seznamu.
+                    value: selectedSource,///aktuálně vybraný zdroj sekvence.
+                    isExpanded: true,///rozbalovací seznam zabírá celou dostupnou šířku.
+                    items: sources.map((String source) {///vytvoření položek dropdownu z dostupných zdrojů sekvence.
+                      return DropdownMenuItem<String>(///vytvoření jednotlivé položky v dropdownu.
+                        value: source, ///hodnota položky je název zdroje.
+                        child: Text(source), ///zobrazený text položky je název zdroje.
+                      );
+                    }).toList(), ///převedení mapovaných položek na seznam.
+                    onChanged: isRunning ? null : (String? newValue) { ///akce při změně výběru zdroje sekvence. Pokud je sekvence spuštěna (isRunning), dropdown je deaktivován (null). Jinak se aktualizuje selectedSource a resetují se související stavy.
+                      setState(() { ///volání setState pro aktualizaci stavu widgetu.
+                        selectedSource = newValue!; ///nastavení nového vybraného zdroje sekvence.
+                        errorMessage = null; ///resetování chybové zprávy.
+                        statusMessage = ''; ///resetování stavové zprávy.
+                        sequenceSteps.clear(); ///vymazání kroků sekvence.
+                        if (selectedSource != 'Vlastní soubor…') { ///pokud není vybrán vlastní soubor, resetují se související proměnné.
+                          customFilePath = null; ///resetování cesty k vlastnímu souboru.
+                          customFileName = null; ///resetování názvu vlastního souboru.
+                        }
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon( ///tlačítko pro otevření editoru aktuálně vybrané sekvence
+                  icon: const Icon(Icons.edit, size: 18),
+                  label: const Text('EDIT'),
+                  onPressed: isRunning ? null : _showSequenceEditor, ///zakázáno při spuštěné sekvenci
+                ),
+              ],
             ),
             const SizedBox(height: 16), ///odsazení mezi dropdownem a dalším obsahem.
 
@@ -313,6 +335,8 @@ class _SequenceScreenState extends State<SequenceScreen> {///třída _SequenceSc
         return;
       }
       loaded = await _loadCustomFile(customFilePath!);///načtení sekvence z vlastního souboru pomocí metody _loadCustomFile., await se používá k čekání na dokončení asynchronní operace načítání souboru., ! znamená, že proměnná customFilePath není null (force unwrapping)., čekáme schválně na dokončení načítání souboru, protože chceme mít jistotu, že sekvence je plně načtena před pokračováním v provádění.
+    } else if (_zaznamPaths.containsKey(selectedSource)) { ///pokud je vybrán záznam uložený na zařízení (zaznam*.txt)
+      loaded = await _loadZaznamFile(_zaznamPaths[selectedSource]!); ///načtení záznamu z interního úložiště zařízení
     } else {///;pokud je vybrán jeden z výchozích zdrojů sekvence (defaults)
       loaded = await _loadDefaultSequence(selectedSource);///načtení výchozí sekvence pomocí metody _loadDefaultSequence., await se používá k čekání na dokončení asynchronní operace načítání sekvence.
     }
@@ -571,6 +595,183 @@ class _SequenceScreenState extends State<SequenceScreen> {///třída _SequenceSc
       });
       return false;
     }
+  }
+
+  // ── Záznamy (zaznam*.txt) – načítání a správa ──────────────────────────────
+
+  /// Prohledá adresář dokumentů zařízení a přidá dostupné záznamy (zaznam1..99.txt)
+  /// do seznamu zdrojů sekvence.
+  Future<void> _loadZaznamFiles() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory(); ///adresář dokumentů aplikace
+      final newPaths = <String, String>{};
+
+      for (int i = 1; i <= 99; i++) {
+        final path = '${dir.path}/zaznam$i.txt';
+        if (File(path).existsSync()) { ///soubor existuje → přidáme do mapy
+          newPaths['Záznam $i'] = path;
+        }
+      }
+
+      if (!mounted) return; ///kontrola, zda je widget stále aktivní
+      setState(() {
+        _zaznamPaths = newPaths;
+        /// Přestavba seznamu zdrojů: Default 1–3, záznamy, Vlastní soubor…
+        sources = [
+          'Default 1',
+          'Default 2',
+          'Default 3',
+          ...newPaths.keys, ///vložení názvů dostupných záznamů
+          'Vlastní soubor…',
+        ];
+        /// Pokud aktuálně vybraný zdroj zmizel (např. smazaný záznam), přepneme na Default 1
+        if (!sources.contains(selectedSource)) {
+          selectedSource = 'Default 1';
+        }
+      });
+    } catch (_) {
+      // Pokud selže získání adresáře (např. na webu), jednoduše přeskočíme
+    }
+  }
+
+  /// Načtení záznamu ze souboru v interním úložišti zařízení.
+  Future<bool> _loadZaznamFile(String path) async {
+    try {
+      final content = await File(path).readAsString(); ///přečtení obsahu souboru
+      return _parseSequence(content); ///parsování obsahu shodné s výchozími sekvencemi
+    } catch (e) {
+      setState(() {
+        errorMessage = 'Chyba při načítání záznamu: $e';
+      });
+      return false;
+    }
+  }
+
+  // ── Editor sekvencí ────────────────────────────────────────────────────────
+
+  /// Otevře jednoduchý multi-line textový editor pro aktuálně vybranou sekvenci.
+  /// Výchozí sekvence (Default 1–3) jsou zobrazeny jen pro čtení.
+  /// Záznamy a vlastní soubory lze upravit a uložit.
+  Future<void> _showSequenceEditor() async {
+    String content = '';
+    bool canSave = false;
+    String? savePath;
+
+    try {
+      if (selectedSource == 'Default 1' || selectedSource == 'Default 2' || selectedSource == 'Default 3') {
+        /// Výchozí sekvence jsou v assets – lze je zobrazit, ale ne přepsat
+        final num = selectedSource.split(' ')[1]; ///číslo výchozí sekvence (1, 2 nebo 3)
+        content = await rootBundle.loadString('assets/sequences/default$num.txt');
+        canSave = false;
+      } else if (_zaznamPaths.containsKey(selectedSource)) {
+        /// Záznam uložený na zařízení – lze editovat a uložit
+        savePath = _zaznamPaths[selectedSource];
+        content = await File(savePath!).readAsString();
+        canSave = true;
+      } else if (selectedSource == 'Vlastní soubor…') {
+        /// Vlastní soubor vybraný přes FilePicker
+        if (customFilePath != null) {
+          savePath = customFilePath;
+          content = String.fromCharCodes(customFileBytes ?? []);
+          canSave = true;
+        } else {
+          Get.snackbar('Info', 'Nejprve vyberte soubor.', snackPosition: SnackPosition.BOTTOM);
+          return;
+        }
+      } else {
+        return; ///neznámý zdroj, nic neděláme
+      }
+    } catch (e) {
+      Get.snackbar('Chyba', 'Nelze načíst soubor: $e', snackPosition: SnackPosition.BOTTOM);
+      return;
+    }
+
+    final editorController = TextEditingController(text: content); ///controller pro textové pole editoru
+
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: Text('Úprava: $selectedSource'),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 400,
+            child: TextField(
+              controller: editorController,
+              maxLines: null, ///neomezený počet řádků
+              expands: true, ///vyplnění dostupného prostoru
+              keyboardType: TextInputType.multiline,
+              readOnly: !canSave, ///výchozí sekvence jsou jen pro čtení
+              decoration: InputDecoration(
+                border: const OutlineInputBorder(),
+                hintText: canSave
+                    ? 'Formát: pin,angle,speed,delayMs'
+                    : 'Výchozí sekvence – pouze pro čtení',
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(), ///zavření bez uložení
+              child: const Text('Zrušit'),
+            ),
+            if (canSave)
+              ElevatedButton(
+                onPressed: () async {
+                  final newContent = editorController.text;
+                  final validationError = _validateSequenceText(newContent); ///základní validace formátu
+                  if (validationError != null) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      SnackBar(content: Text(validationError)),
+                    );
+                    return;
+                  }
+                  try {
+                    await File(savePath!).writeAsString(newContent); ///zápis upraveného obsahu do souboru
+                    if (ctx.mounted) Navigator.of(ctx).pop();
+                    setState(() {
+                      statusMessage = 'Sekvence uložena: $selectedSource';
+                    });
+                    /// Pokud byl upraven soubor záznamu, aktualizujeme bajty pro případ opakovaného použití
+                    if (selectedSource == 'Vlastní soubor…') {
+                      customFileBytes = newContent.codeUnits;
+                    }
+                  } catch (e) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      SnackBar(content: Text('Chyba při ukládání: $e')),
+                    );
+                  }
+                },
+                child: const Text('Uložit'),
+              ),
+          ],
+        );
+      },
+    );
+
+    editorController.dispose();
+  }
+
+  /// Základní validace textového obsahu sekvence.
+  /// Každý neprázdný řádek (mimo komentáře) musí mít 3–4 číselná pole oddělená čárkami.
+  /// Vrací chybovou zprávu, nebo null pokud je obsah validní.
+  String? _validateSequenceText(String content) {
+    final lines = content.split('\n');
+    for (int i = 0; i < lines.length; i++) {
+      final line = lines[i].trim();
+      if (line.isEmpty || line.startsWith('#') || line.startsWith('//')) continue; ///prázdné řádky a komentáře přeskočíme
+
+      final parts = line.split(',');
+      if (parts.length < 3 || parts.length > 4) {
+        return 'Chyba na řádku ${i + 1}: Očekáván formát pin,angle,speed[,delayMs]';
+      }
+      for (final part in parts) {
+        if (int.tryParse(part.trim()) == null) {
+          return 'Chyba na řádku ${i + 1}: Neplatné číselné hodnoty';
+        }
+      }
+    }
+    return null; ///obsah je validní
   }
 }
 
