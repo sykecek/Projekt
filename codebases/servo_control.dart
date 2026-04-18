@@ -761,7 +761,9 @@ void _openRobotAxesImageViewer() { /// metoda pro otevření dialogu s interakti
       final now = DateTime.now();
       delay = _lastRecordTime == null
           ? 300 ///první krok dostane výchozí delay 300 ms
-          : now.difference(_lastRecordTime!).inMilliseconds.clamp(50, 30000); ///skutečný čas s limity 50–30000 ms
+          : now.difference(_lastRecordTime!).inMilliseconds.clamp(50, 30000);
+          ///clamp 50 ms: spodní limit zabrání příliš rychlým krokům, které servo nestihne zpracovat
+          ///clamp 30000 ms: horní limit omezí extrémně dlouhé pauzy na rozumnou hodnotu pro přehrávání
       _lastRecordTime = now;
     } else {
       delay = 300; ///fixní delay 300 ms (výchozí)

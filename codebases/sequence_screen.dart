@@ -629,8 +629,10 @@ class _SequenceScreenState extends State<SequenceScreen> {///třída _SequenceSc
           selectedSource = 'Default 1';
         }
       });
-    } catch (_) {
-      // Pokud selže získání adresáře (např. na webu), jednoduše přeskočíme
+    } catch (e) {
+      // Pokud selže získání adresáře (např. na webu nebo při nedostupném úložišti),
+      // jednoduše přeskočíme – záznamy nebudou viditelné v dropdownu.
+      print('[DEBUG] _loadZaznamFiles: nelze načíst záznamy: $e');
     }
   }
 
@@ -660,8 +662,8 @@ class _SequenceScreenState extends State<SequenceScreen> {///třída _SequenceSc
     try {
       if (selectedSource == 'Default 1' || selectedSource == 'Default 2' || selectedSource == 'Default 3') {
         /// Výchozí sekvence jsou v assets – lze je zobrazit, ale ne přepsat
-        final num = selectedSource.split(' ')[1]; ///číslo výchozí sekvence (1, 2 nebo 3)
-        content = await rootBundle.loadString('assets/sequences/default$num.txt');
+        final seqNum = selectedSource.split(' ')[1]; ///číslo výchozí sekvence (1, 2 nebo 3)
+        content = await rootBundle.loadString('assets/sequences/default$seqNum.txt');
         canSave = false;
       } else if (_zaznamPaths.containsKey(selectedSource)) {
         /// Záznam uložený na zařízení – lze editovat a uložit
